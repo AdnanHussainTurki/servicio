@@ -1,0 +1,25 @@
+[package]
+name = "servicio-cli"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "servicio"
+path = "src/main.rs"
+
+[lib]
+name = "servicio_cli_lib"
+path = "src/client.rs"
+
+[dependencies]
+servicio-ipc = { path = "../servicio-ipc" }
+servicio-core = { path = "../servicio-core" }
+tokio.workspace = true
+serde_json.workspace = true
+clap.workspace = true
+anyhow.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+servicio-daemon = { path = "../servicio-daemon" }
