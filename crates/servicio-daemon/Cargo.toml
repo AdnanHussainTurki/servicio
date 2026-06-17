@@ -1,0 +1,18 @@
+[package]
+name = "servicio-daemon"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+servicio-core = { path = "../servicio-core" }
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+rusqlite.workspace = true
+clap.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

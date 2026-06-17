@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/servicio-core"]
+members = ["crates/servicio-core", "crates/servicio-daemon"]
 
 [workspace.package]
 edition = "2021"
