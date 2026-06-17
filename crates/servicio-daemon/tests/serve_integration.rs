@@ -144,6 +144,30 @@ async fn start_then_stop_worker() {
 }
 
 #[tokio::test]
+async fn oversized_line_does_not_crash_server() {
+    let dir = tempfile::tempdir().unwrap();
+    let paths = Paths::new(dir.path().to_path_buf());
+    let h = start(paths.clone(), "secret".into()).await;
+
+    // One connection sends a 2 MiB line with no newline; server should drop it.
+    {
+        let stream = UnixStream::connect(&paths.socket()).await.unwrap();
+        let (_rd, mut wr) = stream.into_split();
+        let big = vec![b'x'; 2 * 1024 * 1024];
+        let _ = wr.write_all(&big).await;
+        let _ = wr.flush().await;
+    }
+    // A fresh connection must still work — proves the daemon is alive.
+    let replies = send_recv(
+        &paths.socket(),
+        &[Frame::Request { id: 1, method: "hello".into(), params: json!({"token":"secret"}) }],
+    )
+    .await;
+    assert!(matches!(replies[0], Frame::Response { id: 1, error: None, .. }));
+    h.shutdown().await;
+}
+
+#[tokio::test]
 async fn subscribe_streams_state_events_for_started_worker() {
     let dir = tempfile::tempdir().unwrap();
     let paths = Paths::new(dir.path().to_path_buf());

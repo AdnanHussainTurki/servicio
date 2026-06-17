@@ -14,6 +14,8 @@ use tokio::sync::watch;
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 
+const MAX_LINE_BYTES: usize = 1024 * 1024; // 1 MiB per frame
+
 /// Shared daemon state handed to each connection.
 pub struct Daemon {
     pub token: String,
@@ -42,6 +44,7 @@ impl ServeHandle {
 /// Reconciles autostart workers from the DB before returning.
 pub async fn serve(paths: Paths, token: String) -> std::io::Result<ServeHandle> {
     std::fs::create_dir_all(&paths.base)?;
+    set_dir_private(&paths.base)?;
     let _ = std::fs::remove_file(paths.socket());
     let listener = UnixListener::bind(paths.socket())?;
     set_socket_perms(&paths.socket())?;
@@ -90,11 +93,16 @@ async fn accept_loop(
 async fn handle_conn(stream: UnixStream, daemon: Arc<Daemon>) {
     let (rd, wr) = stream.into_split();
     let wr = Arc::new(Mutex::new(wr));
-    let mut lines = BufReader::new(rd).lines();
+    let mut reader = BufReader::new(rd);
     let mut authed = false;
+    let mut buf = Vec::new();
 
-    while let Ok(Some(line)) = lines.next_line().await {
-        let frame = match Frame::from_line(&line) {
+    while let Ok(Some(())) = read_line_capped(&mut reader, &mut buf, MAX_LINE_BYTES).await {
+        let line = match std::str::from_utf8(&buf) {
+            Ok(s) => s,
+            Err(_) => continue,
+        };
+        let frame = match Frame::from_line(line) {
             Ok(f) => f,
             Err(_) => continue,
         };
@@ -297,6 +305,33 @@ async fn dispatch(daemon: &Arc<Daemon>, id: u64, method: &str, params: serde_jso
     }
 }
 
+/// Read one '\n'-terminated line into `buf` (without the newline), capping total
+/// bytes at `max`. Returns Ok(None) on clean EOF, Err on a too-long line.
+async fn read_line_capped(
+    reader: &mut BufReader<tokio::net::unix::OwnedReadHalf>,
+    buf: &mut Vec<u8>,
+    max: usize,
+) -> std::io::Result<Option<()>> {
+    buf.clear();
+    loop {
+        let available = reader.fill_buf().await?;
+        if available.is_empty() {
+            return if buf.is_empty() { Ok(None) } else { Ok(Some(())) };
+        }
+        if let Some(pos) = available.iter().position(|&b| b == b'\n') {
+            buf.extend_from_slice(&available[..pos]);
+            reader.consume(pos + 1);
+            return Ok(Some(()));
+        }
+        buf.extend_from_slice(available);
+        let n = available.len();
+        reader.consume(n);
+        if buf.len() > max {
+            return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "line too long"));
+        }
+    }
+}
+
 #[cfg(unix)]
 fn set_socket_perms(path: &std::path::Path) -> std::io::Result<()> {
     use std::os::unix::fs::PermissionsExt;
@@ -305,6 +340,17 @@ fn set_socket_perms(path: &std::path::Path) -> std::io::Result<()> {
 
 #[cfg(not(unix))]
 fn set_socket_perms(_path: &std::path::Path) -> std::io::Result<()> {
+    Ok(())
+}
+
+#[cfg(unix)]
+fn set_dir_private(path: &std::path::Path) -> std::io::Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700))
+}
+
+#[cfg(not(unix))]
+fn set_dir_private(_path: &std::path::Path) -> std::io::Result<()> {
     Ok(())
 }
 

@@ -35,6 +35,11 @@ impl Manager {
 
     /// Start every instance for a worker per its concurrency, each in its own task.
     pub async fn start_worker(&mut self, spec: WorkerSpec) {
+        if let Some(old) = self.workers.remove(&spec.name) {
+            for h in old.handles {
+                h.abort();
+            }
+        }
         let concurrency = match spec.run_mode {
             RunMode::Daemon { concurrency } => concurrency.max(1),
         };
@@ -152,6 +157,16 @@ mod tests {
         assert_eq!(status.len(), 1);
         assert_eq!(status[0].name, "q");
         assert_eq!(status[0].instances.len(), 2);
+        mgr.stop_all().await;
+    }
+
+    #[tokio::test]
+    async fn restarting_worker_does_not_leak_instances() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut mgr = Manager::new(Arc::new(TokioProcess), dir.path().to_path_buf());
+        mgr.start_worker(long_running("q")).await;
+        mgr.start_worker(long_running("q")).await; // restart, must replace not accumulate
+        assert_eq!(mgr.instance_count("q"), 2);
         mgr.stop_all().await;
     }
 
