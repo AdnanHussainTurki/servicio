@@ -86,11 +86,12 @@ impl Manager {
         out
     }
 
-    /// Stop one worker's instances. Returns true if it existed.
+    /// Stop one worker's instances (awaiting teardown). Returns true if it existed.
     pub async fn stop_worker(&mut self, name: &str) -> bool {
         if let Some(w) = self.workers.remove(name) {
             for h in w.handles {
                 h.abort();
+                let _ = h.await;
             }
             true
         } else {
@@ -98,11 +99,12 @@ impl Manager {
         }
     }
 
-    /// Abort all running instance tasks (kill_on_drop terminates the children).
+    /// Stop all workers and await their teardown so child processes are reaped.
     pub async fn stop_all(&mut self) {
         for (_, w) in self.workers.drain() {
             for h in w.handles {
                 h.abort();
+                let _ = h.await;
             }
         }
     }

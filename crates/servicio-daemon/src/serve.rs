@@ -30,12 +30,14 @@ pub struct ServeHandle {
     shutdown_tx: watch::Sender<bool>,
     accept_task: JoinHandle<()>,
     socket_path: std::path::PathBuf,
+    daemon: Arc<Daemon>,
 }
 
 impl ServeHandle {
     pub async fn shutdown(self) {
         let _ = self.shutdown_tx.send(true);
         let _ = self.accept_task.await;
+        self.daemon.manager.lock().await.stop_all().await;
         let _ = std::fs::remove_file(&self.socket_path);
     }
 }
@@ -66,8 +68,8 @@ pub async fn serve(paths: Paths, token: String) -> std::io::Result<ServeHandle> 
 
     let (shutdown_tx, shutdown_rx) = watch::channel(false);
     let socket_path = paths.socket();
-    let accept_task = tokio::spawn(accept_loop(listener, daemon, shutdown_rx));
-    Ok(ServeHandle { shutdown_tx, accept_task, socket_path })
+    let accept_task = tokio::spawn(accept_loop(listener, Arc::clone(&daemon), shutdown_rx));
+    Ok(ServeHandle { shutdown_tx, accept_task, socket_path, daemon })
 }
 
 async fn accept_loop(

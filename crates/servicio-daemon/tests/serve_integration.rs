@@ -214,3 +214,39 @@ async fn subscribe_streams_state_events_for_started_worker() {
     assert!(got, "expected a state event after start");
     h.shutdown().await;
 }
+
+#[tokio::test]
+async fn shutdown_stops_worker_children() {
+    let dir = tempfile::tempdir().unwrap();
+    let paths = Paths::new(dir.path().to_path_buf());
+    let h = start(paths.clone(), "secret".into()).await;
+
+    let marker = dir.path().join("alive");
+    let mut spec = sleeper("q");
+    spec.args = vec![
+        "-c".into(),
+        format!("while true; do echo x >> {} ; sleep 0.05; done", marker.display()),
+    ];
+
+    let _ = hello_then(
+        &paths.socket(),
+        vec![
+            Frame::Request { id: 1, method: "add_worker".into(), params: json!({ "spec": spec }) },
+            Frame::Request { id: 2, method: "start_worker".into(), params: json!({"name":"q"}) },
+        ],
+    )
+    .await;
+
+    // Let the child run and grow the marker file.
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert!(marker.exists(), "worker should have started writing");
+
+    h.shutdown().await;
+
+    // After shutdown the child must be dead: file size stops changing.
+    tokio::time::sleep(Duration::from_millis(150)).await;
+    let size_a = std::fs::metadata(&marker).map(|m| m.len()).unwrap_or(0);
+    tokio::time::sleep(Duration::from_millis(400)).await;
+    let size_b = std::fs::metadata(&marker).map(|m| m.len()).unwrap_or(0);
+    assert_eq!(size_a, size_b, "worker child kept running after shutdown (orphaned)");
+}

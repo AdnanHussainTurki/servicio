@@ -18,6 +18,7 @@ impl InstanceLock {
             .create(true)
             .read(true)
             .write(true)
+            .truncate(false)
             .open(path)?;
         file.try_lock_exclusive().map_err(|_| {
             io::Error::new(
