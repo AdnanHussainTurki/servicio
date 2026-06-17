@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/servicio-core", "crates/servicio-daemon"]
+members = ["crates/servicio-core", "crates/servicio-daemon", "crates/servicio-ipc"]
 
 [workspace.package]
 edition = "2021"
@@ -16,3 +16,6 @@ tracing = "0.1"
 rusqlite = { version = "0.31", features = ["bundled"] }
 clap = { version = "4", features = ["derive"] }
 tempfile = "3"
+fs2 = "0.4"
+getrandom = "0.2"
+anyhow = "1"
