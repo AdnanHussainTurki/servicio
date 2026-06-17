@@ -55,7 +55,9 @@ Create `Cargo.toml`:
 ```toml
 [workspace]
 resolver = "2"
-members = ["crates/servicio-core", "crates/servicio-daemon"]
+# servicio-daemon is added to members in Task 8 (it does not exist yet; cargo
+# fails to load a workspace whose declared member dir is missing).
+members = ["crates/servicio-core"]
 
 [workspace.package]
 edition = "2021"
@@ -639,6 +641,14 @@ pub struct Spawned {
     pub stderr: Option<Box<dyn AsyncRead + Unpin + Send>>,
 }
 
+// `Child` and the boxed `dyn AsyncRead` pipes are not `Debug`, but the tests call
+// `.unwrap_err()` (which requires the `Ok` type to be `Debug`). Provide a manual impl.
+impl std::fmt::Debug for Spawned {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Spawned").field("pid", &self.child.id()).finish_non_exhaustive()
+    }
+}
+
 impl Spawned {
     /// The OS process id, if still available.
     pub fn pid(&self) -> Option<u32> {
@@ -1218,6 +1228,14 @@ git commit -m "feat(core): manager owning many workers and their instances"
 - Create: `crates/servicio-daemon/src/db.rs`
 - Create: `crates/servicio-daemon/src/main.rs` (temporary minimal entry)
 
+- [ ] **Step 0: Add the daemon to the workspace members**
+
+Edit the root `Cargo.toml` `members` array to include the daemon now that it exists:
+
+```toml
+members = ["crates/servicio-core", "crates/servicio-daemon"]
+```
+
 - [ ] **Step 1: Create the daemon crate manifest**
 
 Create `crates/servicio-daemon/Cargo.toml`:
@@ -1794,6 +1812,32 @@ git commit -m "docs: phase 1 readme and run instructions"
 ```
 
 ---
+
+## Implementation deviations (recorded during execution)
+
+All 11 tasks were implemented and committed; `cargo test` = 27 passing. Deviations from
+the original task text, each justified:
+- **Task 0 / 8 — workspace members:** the root `Cargo.toml` initially declares only
+  `crates/servicio-core` as a member; Task 8 adds `crates/servicio-daemon`. Cargo refuses
+  to load a workspace whose declared member directory does not yet exist, so `cargo build
+  -p servicio-core` cannot pass in Task 0 if the daemon is declared early.
+- **Task 4 — `Spawned: Debug`:** a manual `impl Debug for Spawned` was added because the
+  test's `unwrap_err()` requires the `Ok` type to be `Debug`, and `Child` / boxed
+  `dyn AsyncRead` cannot derive it.
+- **Task 6 — concurrent log pump (post-review fix, commit `2545d87`):** the original code
+  drained stdout to EOF *before* calling `wait()` (sequential). It was rewritten to drain
+  stdout AND stderr concurrently with `wait()` via a spawned pump task bounded by a 2s
+  join-then-abort, so a long-running worker (or one whose grandchild holds the pipe open)
+  cannot wedge exit detection, and a chatty stderr cannot fill its pipe buffer and stall.
+  The spawn-failure path now emits `Crashed` before `Backoff` (legal transition). A
+  `captures_stderr_to_log` regression test was added. Known Phase-1 limitation documented
+  in-code: the single-sample `reset_window` can let a worker that always crashes just past
+  the window evade the crash-loop guard (systemd-style start-limit semantics); a
+  sliding-window counter replaces it in a later phase.
+- **Task 9 — `--args` parsing (post-review fix, commit `faed7fe`):** the test CLI's
+  `--args` uses `num_args = 0.., allow_hyphen_values = true` (not `value_delimiter = ' '`)
+  so values like `-c` are accepted and quoting is preserved. Consequence: `--args` must be
+  the LAST flag on the command line (greedy trailing var-arg). The README documents this.
 
 ## Self-review notes (addressed inline)
 - **Spec coverage:** This plan implements the Phase-1 slice of the spec's §3–§6 (daemon
