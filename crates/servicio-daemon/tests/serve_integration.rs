@@ -142,3 +142,51 @@ async fn start_then_stop_worker() {
     assert!(matches!(replies[3], Frame::Response { id: 3, error: None, .. }));
     h.shutdown().await;
 }
+
+#[tokio::test]
+async fn subscribe_streams_state_events_for_started_worker() {
+    let dir = tempfile::tempdir().unwrap();
+    let paths = Paths::new(dir.path().to_path_buf());
+    let h = start(paths.clone(), "secret".into()).await;
+
+    // Register the worker (persist only).
+    let _ = hello_then(
+        &paths.socket(),
+        vec![Frame::Request { id: 1, method: "add_worker".into(), params: json!({ "spec": sleeper("q") }) }],
+    )
+    .await;
+
+    // Subscriber connection: hello + subscribe, consume the two acks.
+    let stream = UnixStream::connect(&paths.socket()).await.unwrap();
+    let (rd, mut wr) = stream.into_split();
+    for f in [
+        Frame::Request { id: 0, method: "hello".into(), params: json!({"token":"secret"}) },
+        Frame::Request { id: 1, method: "subscribe".into(), params: json!({"topics":["state"]}) },
+    ] {
+        wr.write_all(format!("{}\n", f.to_line()).as_bytes()).await.unwrap();
+    }
+    let mut lines = BufReader::new(rd).lines();
+    let _ = lines.next_line().await.unwrap(); // hello ack
+    let _ = lines.next_line().await.unwrap(); // subscribe ack
+
+    // Trigger a start on a separate connection.
+    let _ = hello_then(
+        &paths.socket(),
+        vec![Frame::Request { id: 1, method: "start_worker".into(), params: json!({"name":"q"}) }],
+    )
+    .await;
+
+    // Expect a state Event within a couple seconds.
+    let got = tokio::time::timeout(Duration::from_secs(3), async {
+        while let Ok(Some(line)) = lines.next_line().await {
+            if let Ok(Frame::Event { topic, .. }) = Frame::from_line(&line) {
+                if topic == "state" { return true; }
+            }
+        }
+        false
+    })
+    .await
+    .unwrap_or(false);
+    assert!(got, "expected a state event after start");
+    h.shutdown().await;
+}

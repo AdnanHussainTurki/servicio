@@ -1,9 +1,10 @@
 use crate::db::Db;
 use crate::paths::Paths;
+use servicio_core::event::SupervisorEvent;
 use servicio_core::manager::Manager;
 use servicio_core::process::TokioProcess;
 use servicio_core::worker::WorkerSpec;
-use servicio_ipc::types::{InstanceStatus as IpcInstanceStatus, WorkerStatus};
+use servicio_ipc::types::{InstanceStatus as IpcInstanceStatus, LogEvent, StateEvent, WorkerStatus};
 use servicio_ipc::Frame;
 use serde_json::json;
 use std::sync::Arc;
@@ -87,7 +88,8 @@ async fn accept_loop(
 }
 
 async fn handle_conn(stream: UnixStream, daemon: Arc<Daemon>) {
-    let (rd, mut wr) = stream.into_split();
+    let (rd, wr) = stream.into_split();
+    let wr = Arc::new(Mutex::new(wr));
     let mut lines = BufReader::new(rd).lines();
     let mut authed = false;
 
@@ -103,18 +105,79 @@ async fn handle_conn(stream: UnixStream, daemon: Arc<Daemon>) {
                 && params.get("token").and_then(|t| t.as_str()) == Some(daemon.token.as_str())
             {
                 authed = true;
-                let _ = write_frame(&mut wr, &Frame::ok(id, json!({"daemon_version": daemon.version}))).await;
+                let _ = write_frame_locked(&wr, &Frame::ok(id, json!({"daemon_version": daemon.version}))).await;
                 continue;
             }
-            let _ = write_frame(&mut wr, &Frame::err(id, "unauthorized", "valid hello required")).await;
+            let _ = write_frame_locked(&wr, &Frame::err(id, "unauthorized", "valid hello required")).await;
             return;
         }
 
+        if method == "subscribe" {
+            let topics: Vec<String> = params
+                .get("topics")
+                .and_then(|t| t.as_array())
+                .map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect())
+                .unwrap_or_default();
+            let worker_filter = params.get("worker").and_then(|w| w.as_str()).map(String::from);
+            let rx = daemon.manager.lock().await.subscribe();
+            let _ = write_frame_locked(&wr, &Frame::ok(id, json!({"subscribed": true}))).await;
+            spawn_forwarder(Arc::clone(&wr), rx, topics, worker_filter);
+            continue;
+        }
+
         let reply = dispatch(&daemon, id, &method, params).await;
-        if write_frame(&mut wr, &reply).await.is_err() {
+        if write_frame_locked(&wr, &reply).await.is_err() {
             return;
         }
     }
+}
+
+fn spawn_forwarder(
+    wr: Arc<Mutex<tokio::net::unix::OwnedWriteHalf>>,
+    mut rx: tokio::sync::broadcast::Receiver<SupervisorEvent>,
+    topics: Vec<String>,
+    worker_filter: Option<String>,
+) {
+    tokio::spawn(async move {
+        loop {
+            match rx.recv().await {
+                Ok(ev) => {
+                    let frame = match ev {
+                        SupervisorEvent::State { worker, instance, from, to } => {
+                            if !topics.iter().any(|t| t == "state") { continue; }
+                            if let Some(f) = &worker_filter { if f != &worker { continue; } }
+                            Frame::Event {
+                                topic: "state".into(),
+                                payload: serde_json::to_value(StateEvent { worker, instance, from, to }).unwrap(),
+                            }
+                        }
+                        SupervisorEvent::Log { worker, instance, stream, line } => {
+                            if !topics.iter().any(|t| t == "log") { continue; }
+                            if let Some(f) = &worker_filter { if f != &worker { continue; } }
+                            Frame::Event {
+                                topic: "log".into(),
+                                payload: serde_json::to_value(LogEvent { worker, instance, stream, line }).unwrap(),
+                            }
+                        }
+                    };
+                    if write_frame_locked(&wr, &frame).await.is_err() { break; }
+                }
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
+                    let frame = Frame::Event { topic: "lagged".into(), payload: json!({"dropped": n}) };
+                    if write_frame_locked(&wr, &frame).await.is_err() { break; }
+                }
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+            }
+        }
+    });
+}
+
+async fn write_frame_locked(
+    wr: &Arc<Mutex<tokio::net::unix::OwnedWriteHalf>>,
+    frame: &Frame,
+) -> std::io::Result<()> {
+    let mut guard = wr.lock().await;
+    guard.write_all(format!("{}\n", frame.to_line()).as_bytes()).await
 }
 
 /// Method dispatch for authenticated connections. Extended in Task 6/7.
@@ -232,10 +295,6 @@ async fn dispatch(daemon: &Arc<Daemon>, id: u64, method: &str, params: serde_jso
         }
         other => Frame::err(id, "unknown_method", &format!("no such method: {other}")),
     }
-}
-
-async fn write_frame(wr: &mut tokio::net::unix::OwnedWriteHalf, frame: &Frame) -> std::io::Result<()> {
-    wr.write_all(format!("{}\n", frame.to_line()).as_bytes()).await
 }
 
 #[cfg(unix)]
