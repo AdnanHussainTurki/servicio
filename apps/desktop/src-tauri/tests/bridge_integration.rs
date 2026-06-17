@@ -55,3 +55,25 @@ async fn add_list_start_stop_via_bridge() {
 
     handle.shutdown().await;
 }
+
+use servicio_app::events::event_payload;
+use servicio_ipc::Frame;
+use serde_json::json;
+
+#[test]
+fn maps_state_event_frame_to_payload() {
+    let frame = Frame::Event {
+        topic: "state".into(),
+        payload: json!({"worker":"q","instance":0,"from":"starting","to":"running"}),
+    };
+    let p = event_payload(&frame).unwrap();
+    assert_eq!(p["kind"], "state");
+    assert_eq!(p["worker"], "q");
+    assert_eq!(p["to"], "running");
+}
+
+#[test]
+fn non_event_frame_maps_to_none() {
+    let frame = Frame::Response { id: 1, result: None, error: None };
+    assert!(event_payload(&frame).is_none());
+}
