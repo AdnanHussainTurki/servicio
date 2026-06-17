@@ -4,6 +4,14 @@ edition.workspace = true
 version.workspace = true
 license.workspace = true
 
+[lib]
+name = "servicio_daemon_lib"
+path = "src/lib.rs"
+
+[[bin]]
+name = "servicio-daemon"
+path = "src/main.rs"
+
 [dependencies]
 servicio-core = { path = "../servicio-core" }
 tokio.workspace = true
