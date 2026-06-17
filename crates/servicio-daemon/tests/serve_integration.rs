@@ -2,8 +2,10 @@
 // exercise the handshake + ping + shutdown.
 use servicio_daemon_lib::paths::Paths;
 use servicio_daemon_lib::serve::{serve, ServeHandle};
+use servicio_core::worker::{RestartPolicy, RunMode, WorkerSpec};
 use servicio_ipc::Frame;
 use serde_json::json;
+use std::collections::BTreeMap;
 use std::time::Duration;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixStream;
@@ -76,4 +78,67 @@ async fn shutdown_removes_socket() {
     assert!(paths.socket().exists());
     h.shutdown().await;
     assert!(!paths.socket().exists());
+}
+
+async fn hello_then(sock: &std::path::Path, reqs: Vec<Frame>) -> Vec<Frame> {
+    let mut frames = vec![Frame::Request { id: 0, method: "hello".into(), params: json!({"token":"secret"}) }];
+    frames.extend(reqs);
+    send_recv(sock, &frames).await
+}
+
+fn sleeper(name: &str) -> WorkerSpec {
+    WorkerSpec {
+        name: name.into(),
+        command: "sh".into(),
+        args: vec!["-c".into(), "sleep 30".into()],
+        working_dir: std::path::PathBuf::from("/"),
+        env: BTreeMap::new(),
+        run_mode: RunMode::Daemon { concurrency: 1 },
+        restart: RestartPolicy::default(),
+        autostart: false,
+        enabled: true,
+    }
+}
+
+#[tokio::test]
+async fn add_then_list_reflects_worker() {
+    let dir = tempfile::tempdir().unwrap();
+    let paths = Paths::new(dir.path().to_path_buf());
+    let h = start(paths.clone(), "secret".into()).await;
+    let replies = hello_then(
+        &paths.socket(),
+        vec![
+            Frame::Request { id: 1, method: "add_worker".into(), params: json!({ "spec": sleeper("q") }) },
+            Frame::Request { id: 2, method: "list_workers".into(), params: json!({}) },
+        ],
+    )
+    .await;
+    match &replies[2] {
+        Frame::Response { id: 2, result: Some(v), .. } => {
+            let arr = v.as_array().unwrap();
+            assert_eq!(arr.len(), 1);
+            assert_eq!(arr[0]["name"], "q");
+        }
+        other => panic!("unexpected list reply: {other:?}"),
+    }
+    h.shutdown().await;
+}
+
+#[tokio::test]
+async fn start_then_stop_worker() {
+    let dir = tempfile::tempdir().unwrap();
+    let paths = Paths::new(dir.path().to_path_buf());
+    let h = start(paths.clone(), "secret".into()).await;
+    let replies = hello_then(
+        &paths.socket(),
+        vec![
+            Frame::Request { id: 1, method: "add_worker".into(), params: json!({ "spec": sleeper("q") }) },
+            Frame::Request { id: 2, method: "start_worker".into(), params: json!({"name":"q"}) },
+            Frame::Request { id: 3, method: "stop_worker".into(), params: json!({"name":"q"}) },
+        ],
+    )
+    .await;
+    assert!(matches!(replies[2], Frame::Response { id: 2, error: None, .. }));
+    assert!(matches!(replies[3], Frame::Response { id: 3, error: None, .. }));
+    h.shutdown().await;
 }

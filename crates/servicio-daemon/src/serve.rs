@@ -2,6 +2,8 @@ use crate::db::Db;
 use crate::paths::Paths;
 use servicio_core::manager::Manager;
 use servicio_core::process::TokioProcess;
+use servicio_core::worker::WorkerSpec;
+use servicio_ipc::types::{InstanceStatus as IpcInstanceStatus, WorkerStatus};
 use servicio_ipc::Frame;
 use serde_json::json;
 use std::sync::Arc;
@@ -116,7 +118,7 @@ async fn handle_conn(stream: UnixStream, daemon: Arc<Daemon>) {
 }
 
 /// Method dispatch for authenticated connections. Extended in Task 6/7.
-async fn dispatch(daemon: &Arc<Daemon>, id: u64, method: &str, _params: serde_json::Value) -> Frame {
+async fn dispatch(daemon: &Arc<Daemon>, id: u64, method: &str, params: serde_json::Value) -> Frame {
     match method {
         "ping" => Frame::ok(id, json!({"pong": true})),
         "daemon_info" => {
@@ -136,6 +138,97 @@ async fn dispatch(daemon: &Arc<Daemon>, id: u64, method: &str, _params: serde_js
                     "running_count": running_count,
                 }),
             )
+        }
+        "list_workers" => {
+            // DB holds the worker definitions (source of truth). Overlay live
+            // instance status from the Manager where a worker is running.
+            let specs = {
+                let db = daemon.db.lock().await;
+                db.list_workers()
+            };
+            let specs = match specs {
+                Ok(s) => s,
+                Err(e) => return Frame::err(id, "db_error", &e.to_string()),
+            };
+            let mut live: std::collections::HashMap<String, Vec<IpcInstanceStatus>> = {
+                let mgr = daemon.manager.lock().await;
+                mgr.status()
+                    .into_iter()
+                    .map(|w| {
+                        let instances = w
+                            .instances
+                            .into_iter()
+                            .map(|i| IpcInstanceStatus {
+                                index: i.index,
+                                state: i.state,
+                                restart_count: i.restart_count,
+                                pid: i.pid,
+                            })
+                            .collect();
+                        (w.name, instances)
+                    })
+                    .collect()
+            };
+            let list: Vec<WorkerStatus> = specs
+                .into_iter()
+                .map(|spec| WorkerStatus {
+                    instances: live.remove(&spec.name).unwrap_or_default(),
+                    name: spec.name,
+                    run_mode: spec.run_mode,
+                })
+                .collect();
+            match serde_json::to_value(list) {
+                Ok(v) => Frame::ok(id, v),
+                Err(e) => Frame::err(id, "internal", &e.to_string()),
+            }
+        }
+        "add_worker" => {
+            let spec: Result<WorkerSpec, _> =
+                serde_json::from_value(params.get("spec").cloned().unwrap_or(serde_json::Value::Null));
+            match spec {
+                Ok(spec) => {
+                    let name = spec.name.clone();
+                    let db = daemon.db.lock().await;
+                    match db.upsert_worker(&spec) {
+                        Ok(()) => Frame::ok(id, json!({"name": name})),
+                        Err(e) => Frame::err(id, "db_error", &e.to_string()),
+                    }
+                }
+                Err(e) => Frame::err(id, "bad_params", &e.to_string()),
+            }
+        }
+        "remove_worker" => {
+            let name = params.get("name").and_then(|n| n.as_str()).unwrap_or("").to_string();
+            {
+                let mut mgr = daemon.manager.lock().await;
+                mgr.stop_worker(&name).await;
+            }
+            let db = daemon.db.lock().await;
+            match db.remove_worker(&name) {
+                Ok(removed) => Frame::ok(id, json!({"removed": removed})),
+                Err(e) => Frame::err(id, "db_error", &e.to_string()),
+            }
+        }
+        "start_worker" => {
+            let name = params.get("name").and_then(|n| n.as_str()).unwrap_or("").to_string();
+            let db = daemon.db.lock().await;
+            let spec = db.get_worker(&name);
+            drop(db);
+            match spec {
+                Ok(Some(spec)) => {
+                    let mut mgr = daemon.manager.lock().await;
+                    mgr.start_worker(spec).await;
+                    Frame::ok(id, json!({"started": true}))
+                }
+                Ok(None) => Frame::err(id, "not_found", &format!("no worker '{name}'")),
+                Err(e) => Frame::err(id, "db_error", &e.to_string()),
+            }
+        }
+        "stop_worker" => {
+            let name = params.get("name").and_then(|n| n.as_str()).unwrap_or("").to_string();
+            let mut mgr = daemon.manager.lock().await;
+            let stopped = mgr.stop_worker(&name).await;
+            Frame::ok(id, json!({"stopped": stopped}))
         }
         other => Frame::err(id, "unknown_method", &format!("no such method: {other}")),
     }
