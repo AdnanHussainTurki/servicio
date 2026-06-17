@@ -2078,6 +2078,36 @@ git commit -m "docs: phase 2a daemon serve + servicio client usage"
 - OS-service install / run-on-boot.
 - Scheduled/batch modes, metrics history, notifications, remote/TLS.
 
+## Implementation deviations + deferred (recorded during execution)
+
+All 10 tasks implemented; `cargo test` = 53 passing, clippy clean. Notable deviations,
+each justified:
+- **`list_workers` is DB-backed overlaid with live status** (not `mgr.status()` alone). The
+  plan's original arm would have shown nothing for added-but-not-started workers; since the
+  DB is the source of truth, list now reads `db.list_workers()` and overlays live instance
+  status from the manager.
+- **Daemon hardening (post-review, commit `1c6d9d9`):** `Manager::start_worker` now stops the
+  prior generation before inserting (idempotent restart — no orphaned instances on
+  double-start); `handle_conn` uses a 1 MiB-capped line reader (`read_line_capped`) instead
+  of unbounded `lines()` (pre-auth OOM DoS); the daemon base dir is chmod'd `0700` to close
+  the socket bind→chmod TOCTOU window.
+- **Graceful shutdown (post-review, commit `cf1277f`):** `ServeHandle::shutdown` now calls
+  `Manager::stop_all`, and `stop_all`/`stop_worker` await aborted task teardown so
+  `kill_on_drop` reaps child processes — daemon shutdown no longer orphans workers (spec §5.6).
+
+### Deferred to Phase 2b start (from final review)
+- **Extract a tokio-free `servicio-types` leaf crate.** `servicio-ipc` currently depends on
+  `servicio-core` (for `InstanceState`/`RunMode`/`WorkerSpec`), which pulls in tokio —
+  violating the "ipc is pure" goal. Move those shared types to a serde-only leaf crate that
+  both core and ipc depend on. Architectural, not a runtime bug.
+- **Constant-time token compare** (`subtle`); reuse `SubscribeParams` typed struct in the
+  daemon instead of manual topic parsing.
+- **Test-coverage gaps:** `remove_worker` + `daemon_info` over the socket; `lagged` event;
+  multi-subscriber; crash-loop event sequence end-to-end; single-instance-lock via the real
+  `serve` binary; CLI rendered-output assertions.
+- **`add_worker` does not hot-apply to a running worker** — DB spec changes only take effect on
+  next start; document for the GUI.
+
 ## Self-review notes
 - **Spec coverage:** ipc crate (§4) → Tasks 0–1; core events/status/state-machine (§5) →
   Tasks 2–3; serve/lock/auth/shutdown (§5) → Tasks 4–5; method dispatch (§4) → Task 6;
