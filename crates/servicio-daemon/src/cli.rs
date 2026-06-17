@@ -34,6 +34,10 @@ pub enum Command {
     },
     /// List stored workers.
     List,
-    /// Load autostart workers and supervise them until Ctrl-C.
-    Run,
+    /// Run the daemon: bind the socket and supervise workers until terminated.
+    Serve {
+        /// Base dir for socket/token/lock/db (defaults to the runtime dir).
+        #[arg(long)]
+        base: Option<PathBuf>,
+    },
 }
