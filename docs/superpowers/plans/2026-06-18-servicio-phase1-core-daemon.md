@@ -1839,6 +1839,25 @@ the original task text, each justified:
   so values like `-c` are accepted and quoting is preserved. Consequence: `--args` must be
   the LAST flag on the command line (greedy trailing var-arg). The README documents this.
 
+## Deferred to Phase 2 (from final review)
+
+Final review found no Critical issues; 27 tests pass; engine purity intact. Fixed inline:
+graceful log-open failure (no panic, commit `d37c15a`), clippy cleanups. Consciously
+deferred, to do at the start of Phase 2 when lifecycle states get consumed:
+- **Wire the state machine into the supervisor.** `set_state` currently sends directly to
+  the watch channel, bypassing `InstanceState::transition_to`. Doing it properly requires
+  reconciling the transition table with actual emissions (e.g. the clean-exit
+  `Running → Stopped` path is not currently a legal transition). Best done when IPC/GUI
+  start consuming states.
+- **Graceful `stop_all`.** Today it `abort()`s tasks and relies on `kill_on_drop`; it does
+  not await child reaping. Phase 2 graceful-stop (SIGTERM→SIGKILL with timeout) replaces
+  this and should await join handles; the `stop_all` test should then assert child PIDs are
+  gone rather than just map emptiness.
+- **Coverage gaps:** add tests for `Always` policy restarting a *successful* exit, and for
+  the spawn-failure accounting path; exercise `ProcessSpawner` with a fake spawner.
+- **Async log I/O:** `LogSink::write_line` does blocking file I/O on a Tokio thread; move to
+  `spawn_blocking` or an async writer when worker counts grow.
+
 ## Self-review notes (addressed inline)
 - **Spec coverage:** This plan implements the Phase-1 slice of the spec's §3–§6 (daemon
   process model, daemon run mode, restart/backoff/crash-loop, log capture+rotation,
