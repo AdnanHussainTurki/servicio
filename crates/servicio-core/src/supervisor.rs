@@ -1,0 +1,260 @@
+use crate::backoff::Backoff;
+use crate::logsink::LogSink;
+use crate::process::ProcessSpawner;
+use crate::state::InstanceState;
+use crate::worker::{RestartKind, WorkerSpec};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::time::Duration;
+use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::sync::watch;
+
+use std::path::PathBuf;
+use std::time::Instant;
+
+/// Supervises a single instance: spawn, pump logs, decide restart vs give-up.
+pub struct InstanceSupervisor {
+    index: u32,
+    spec: WorkerSpec,
+    spawner: Arc<dyn ProcessSpawner>,
+    log_path: PathBuf,
+    restarts: AtomicU32,
+    state_tx: watch::Sender<InstanceState>,
+    state_rx: watch::Receiver<InstanceState>,
+}
+
+impl InstanceSupervisor {
+    pub fn new(
+        index: u32,
+        spec: WorkerSpec,
+        spawner: Arc<dyn ProcessSpawner>,
+        log_path: PathBuf,
+    ) -> Self {
+        let (state_tx, state_rx) = watch::channel(InstanceState::Stopped);
+        Self { index, spec, spawner, log_path, restarts: AtomicU32::new(0), state_tx, state_rx }
+    }
+
+    pub fn subscribe(&self) -> watch::Receiver<InstanceState> {
+        self.state_rx.clone()
+    }
+
+    pub fn restart_count(&self) -> u32 {
+        self.restarts.load(Ordering::SeqCst)
+    }
+
+    fn set_state(&self, s: InstanceState) {
+        let _ = self.state_tx.send(s);
+    }
+
+    fn backoff(&self) -> Backoff {
+        let r = &self.spec.restart;
+        Backoff::new(
+            Duration::from_secs(r.base_secs),
+            Duration::from_secs(r.max_secs),
+            r.max_retries,
+            Duration::from_secs(r.reset_window_secs),
+        )
+    }
+
+    /// Run the spawn/monitor/restart loop until the instance reaches a terminal state.
+    pub async fn run_until_terminal(&self) {
+        let backoff = self.backoff();
+        let mut retries: u32 = 0;
+        let sink = match LogSink::new(&self.log_path, 10 * 1024 * 1024, 5) {
+            Ok(s) => Arc::new(std::sync::Mutex::new(s)),
+            Err(e) => {
+                tracing::error!("failed to open log sink at {:?}: {e}", self.log_path);
+                self.set_state(InstanceState::Failed);
+                return;
+            }
+        };
+
+        loop {
+            self.set_state(InstanceState::Starting);
+            let started = Instant::now();
+
+            let mut spawned = match self.spawner.spawn(&self.spec) {
+                Ok(s) => s,
+                Err(_) => {
+                    // Treat spawn failure like a crash for restart accounting.
+                    self.set_state(InstanceState::Crashed);
+                    if !self.should_retry(&backoff, retries) {
+                        self.set_state(InstanceState::Failed);
+                        return;
+                    }
+                    retries += 1;
+                    self.restarts.store(retries, Ordering::SeqCst);
+                    self.set_state(InstanceState::Backoff);
+                    self.sleep_backoff(&backoff, retries).await;
+                    continue;
+                }
+            };
+            self.set_state(InstanceState::Running);
+
+            // Drain stdout AND stderr concurrently with waiting for exit, so a
+            // long-running worker that holds its pipes open does not block exit
+            // detection, and a chatty stderr cannot fill its pipe buffer and stall.
+            let idx = self.index;
+            let out = spawned.stdout.take();
+            let err = spawned.stderr.take();
+            let sink_out = Arc::clone(&sink);
+            let sink_err = Arc::clone(&sink);
+            let mut pump = tokio::spawn(async move {
+                let out_fut = async {
+                    if let Some(o) = out {
+                        let mut lines = BufReader::new(o).lines();
+                        while let Ok(Some(line)) = lines.next_line().await {
+                            let _ = sink_out.lock().unwrap().write_line(idx, "stdout", &line);
+                        }
+                    }
+                };
+                let err_fut = async {
+                    if let Some(e) = err {
+                        let mut lines = BufReader::new(e).lines();
+                        while let Ok(Some(line)) = lines.next_line().await {
+                            let _ = sink_err.lock().unwrap().write_line(idx, "stderr", &line);
+                        }
+                    }
+                };
+                tokio::join!(out_fut, err_fut);
+            });
+
+            let status = spawned.wait().await;
+
+            // Normally the pipes hit EOF when the child exits and the pump ends on
+            // its own. Bound the join so a lingering grandchild holding the pipe
+            // open cannot wedge the supervisor; then stop pumping.
+            if tokio::time::timeout(Duration::from_secs(2), &mut pump).await.is_err() {
+                pump.abort();
+            }
+
+            let success = status.map(|s| s.success()).unwrap_or(false);
+            let uptime = started.elapsed();
+
+            // Reset the retry counter after a sufficiently long run (systemd-style
+            // start-limit window). NOTE (Phase 2): a worker that always crashes just
+            // after this window can evade the crash-loop guard; a sliding-window
+            // counter will replace this single-sample check later.
+            if backoff.should_reset(uptime) {
+                retries = 0;
+                self.restarts.store(0, Ordering::SeqCst);
+            }
+
+            if !self.wants_restart(success) {
+                self.set_state(InstanceState::Stopped);
+                return;
+            }
+
+            self.set_state(InstanceState::Crashed);
+            if !self.should_retry(&backoff, retries) {
+                self.set_state(InstanceState::Failed);
+                return;
+            }
+            retries += 1;
+            self.restarts.store(retries, Ordering::SeqCst);
+            self.set_state(InstanceState::Backoff);
+            self.sleep_backoff(&backoff, retries).await;
+        }
+    }
+
+    /// Does the restart policy want another run after this exit?
+    fn wants_restart(&self, success: bool) -> bool {
+        match self.spec.restart.kind {
+            RestartKind::Always => true,
+            RestartKind::OnFailure => !success,
+            RestartKind::Never => false,
+        }
+    }
+
+    /// Are we still under the crash-loop limit?
+    fn should_retry(&self, backoff: &Backoff, retries: u32) -> bool {
+        !backoff.is_crash_loop(retries + 1)
+    }
+
+    async fn sleep_backoff(&self, backoff: &Backoff, attempt: u32) {
+        let d = backoff.delay_for_attempt(attempt);
+        if !d.is_zero() {
+            tokio::time::sleep(d).await;
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::process::TokioProcess;
+    use crate::worker::{RestartPolicy, RunMode};
+    use std::collections::BTreeMap;
+    use std::path::PathBuf;
+
+    fn spec(cmd: &str, args: &[&str], restart: RestartPolicy) -> WorkerSpec {
+        WorkerSpec {
+            name: "t".into(),
+            command: cmd.into(),
+            args: args.iter().map(|s| s.to_string()).collect(),
+            working_dir: PathBuf::from("/"),
+            env: BTreeMap::new(),
+            run_mode: RunMode::Daemon { concurrency: 1 },
+            restart,
+            autostart: false,
+            enabled: true,
+        }
+    }
+
+    #[tokio::test]
+    async fn never_policy_runs_once_then_stops() {
+        let dir = tempfile::tempdir().unwrap();
+        let policy = RestartPolicy { kind: RestartKind::Never, ..Default::default() };
+        let sup = InstanceSupervisor::new(
+            1,
+            spec("sh", &["-c", "exit 0"], policy),
+            Arc::new(TokioProcess),
+            dir.path().join("t.log"),
+        );
+        let mut state_rx = sup.subscribe();
+        sup.run_until_terminal().await;
+        assert_eq!(*state_rx.borrow_and_update(), InstanceState::Stopped);
+        assert_eq!(sup.restart_count(), 0);
+    }
+
+    #[tokio::test]
+    async fn on_failure_policy_restarts_until_crash_loop_then_fails() {
+        let dir = tempfile::tempdir().unwrap();
+        // base 0s so the test does not actually sleep; max_retries 2 → 3rd failure fails it.
+        let policy = RestartPolicy {
+            kind: RestartKind::OnFailure,
+            max_retries: 2,
+            base_secs: 0,
+            max_secs: 0,
+            reset_window_secs: 30,
+        };
+        let sup = InstanceSupervisor::new(
+            1,
+            spec("sh", &["-c", "exit 1"], policy),
+            Arc::new(TokioProcess),
+            dir.path().join("t.log"),
+        );
+        let mut state_rx = sup.subscribe();
+        sup.run_until_terminal().await;
+        assert_eq!(*state_rx.borrow_and_update(), InstanceState::Failed);
+        // 1 initial run + 2 retries = 3 spawns; restart_count counts the retries.
+        assert_eq!(sup.restart_count(), 2);
+    }
+
+    #[tokio::test]
+    async fn captures_stderr_to_log() {
+        let dir = tempfile::tempdir().unwrap();
+        let log = dir.path().join("t.log");
+        let policy = RestartPolicy { kind: RestartKind::Never, ..Default::default() };
+        let sup = InstanceSupervisor::new(
+            0,
+            spec("sh", &["-c", "echo oops 1>&2"], policy),
+            Arc::new(TokioProcess),
+            log.clone(),
+        );
+        sup.run_until_terminal().await;
+        let contents = std::fs::read_to_string(&log).unwrap();
+        assert!(contents.contains("[stderr]"), "log was: {contents}");
+        assert!(contents.contains("oops"));
+    }
+}
