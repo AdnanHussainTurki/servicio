@@ -1,3 +1,5 @@
+[workspace]
+
 [package]
 name = "app"
 version = "0.1.0"
@@ -11,8 +13,13 @@ rust-version = "1.77.2"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [lib]
-name = "app_lib"
+name = "servicio_app"
+path = "src/lib.rs"
 crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "servicio"
+path = "src/main.rs"
 
 [build-dependencies]
 tauri-build = { version = "2.6.2" }
@@ -23,3 +30,12 @@ serde = { version = "1.0", features = ["derive"] }
 log = "0.4"
 tauri = { version = "2.11.2" }
 tauri-plugin-log = "2"
+servicio-cli = { path = "../../../crates/servicio-cli" }
+servicio-ipc = { path = "../../../crates/servicio-ipc" }
+servicio-core = { path = "../../../crates/servicio-core" }
+tokio = { version = "1", features = ["full"] }
+anyhow = "1"
+
+[dev-dependencies]
+servicio-daemon = { path = "../../../crates/servicio-daemon" }
+tempfile = "3"
