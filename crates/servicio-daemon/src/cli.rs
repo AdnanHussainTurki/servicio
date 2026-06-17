@@ -20,7 +20,10 @@ pub enum Command {
         name: String,
         #[arg(long)]
         command: String,
-        #[arg(long, value_delimiter = ' ')]
+        // Pass each worker arg as a separate token, e.g.:
+        //   --args -c "while true; do echo tick; sleep 1; done"
+        // allow_hyphen_values lets values like `-c` through; num_args collects them all.
+        #[arg(long, num_args = 0.., allow_hyphen_values = true)]
         args: Vec<String>,
         #[arg(long, default_value = ".")]
         working_dir: PathBuf,
