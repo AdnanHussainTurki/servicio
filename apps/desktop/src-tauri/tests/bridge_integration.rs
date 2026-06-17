@@ -20,3 +20,38 @@ async fn daemon_status_reports_connected() {
     assert!(status.connected);
     handle.shutdown().await;
 }
+
+use servicio_core::worker::{RestartPolicy, RunMode, WorkerSpec};
+use std::collections::BTreeMap;
+
+fn sleeper(name: &str) -> WorkerSpec {
+    WorkerSpec {
+        name: name.into(),
+        command: "sh".into(),
+        args: vec!["-c".into(), "sleep 30".into()],
+        working_dir: std::path::PathBuf::from("/"),
+        env: BTreeMap::new(),
+        run_mode: RunMode::Daemon { concurrency: 1 },
+        restart: RestartPolicy::default(),
+        autostart: false,
+        enabled: true,
+    }
+}
+
+#[tokio::test]
+async fn add_list_start_stop_via_bridge() {
+    let dir = tempfile::tempdir().unwrap();
+    let (_p, handle, state) = running_daemon(dir.path()).await;
+
+    bridge::add_worker(&state, sleeper("q")).await.unwrap();
+    let list = bridge::list_workers(&state).await.unwrap();
+    assert_eq!(list.len(), 1);
+    assert_eq!(list[0].name, "q");
+
+    bridge::start_worker(&state, "q").await.unwrap();
+    bridge::stop_worker(&state, "q").await.unwrap();
+    bridge::restart_worker(&state, "q").await.unwrap();
+    bridge::stop_worker(&state, "q").await.unwrap();
+
+    handle.shutdown().await;
+}

@@ -1,5 +1,36 @@
 use crate::state::AppState;
 use serde::Serialize;
+use servicio_core::worker::WorkerSpec;
+use servicio_ipc::types::WorkerStatus;
+
+pub async fn list_workers(state: &AppState) -> Result<Vec<WorkerStatus>, String> {
+    let mut client = state.client.lock().await;
+    client.list_workers().await.map_err(|e| e.to_string())
+}
+
+pub async fn add_worker(state: &AppState, spec: WorkerSpec) -> Result<(), String> {
+    let mut client = state.client.lock().await;
+    client.add_worker(&spec).await.map_err(|e| e.to_string())
+}
+
+pub async fn start_worker(state: &AppState, name: &str) -> Result<(), String> {
+    let mut client = state.client.lock().await;
+    client.start_worker(name).await.map_err(|e| e.to_string())
+}
+
+pub async fn stop_worker(state: &AppState, name: &str) -> Result<(), String> {
+    let mut client = state.client.lock().await;
+    client.stop_worker(name).await.map_err(|e| e.to_string())
+}
+
+pub async fn restart_worker(state: &AppState, name: &str) -> Result<(), String> {
+    {
+        let mut client = state.client.lock().await;
+        client.stop_worker(name).await.map_err(|e| e.to_string())?;
+    }
+    let mut client = state.client.lock().await;
+    client.start_worker(name).await.map_err(|e| e.to_string())
+}
 
 #[derive(Serialize)]
 pub struct DaemonStatus {
