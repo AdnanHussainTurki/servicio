@@ -34,6 +34,9 @@ impl InstanceState {
                 | (Crashed, Failed)
                 | (Backoff, Starting)
                 | (Backoff, Stopped)
+                | (Running, Stopped)
+                | (Stopped, Failed)
+                | (Starting, Stopped)
         )
     }
 
@@ -56,6 +59,12 @@ mod tests {
         assert!(InstanceState::Running.can_transition_to(InstanceState::Crashed));
         assert!(InstanceState::Crashed.can_transition_to(InstanceState::Backoff));
         assert!(InstanceState::Backoff.can_transition_to(InstanceState::Starting));
+    }
+
+    #[test]
+    fn clean_exit_and_log_failure_edges_are_legal() {
+        assert!(InstanceState::Running.can_transition_to(InstanceState::Stopped));
+        assert!(InstanceState::Stopped.can_transition_to(InstanceState::Failed));
     }
 
     #[test]
