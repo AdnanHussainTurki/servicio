@@ -5,6 +5,7 @@
 
 pub mod backoff;
 pub mod error;
+pub mod event;
 pub mod logsink;
 pub mod manager;
 pub mod process;

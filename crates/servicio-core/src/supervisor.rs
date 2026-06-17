@@ -1,4 +1,5 @@
 use crate::backoff::Backoff;
+use crate::event::SupervisorEvent;
 use crate::logsink::LogSink;
 use crate::process::ProcessSpawner;
 use crate::state::InstanceState;
@@ -7,6 +8,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::Duration;
 use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::sync::broadcast;
 use tokio::sync::watch;
 
 use std::path::PathBuf;
@@ -21,6 +23,8 @@ pub struct InstanceSupervisor {
     restarts: AtomicU32,
     state_tx: watch::Sender<InstanceState>,
     state_rx: watch::Receiver<InstanceState>,
+    events: Option<broadcast::Sender<SupervisorEvent>>,
+    pid: AtomicU32,
 }
 
 impl InstanceSupervisor {
@@ -31,7 +35,46 @@ impl InstanceSupervisor {
         log_path: PathBuf,
     ) -> Self {
         let (state_tx, state_rx) = watch::channel(InstanceState::Stopped);
-        Self { index, spec, spawner, log_path, restarts: AtomicU32::new(0), state_tx, state_rx }
+        Self {
+            index,
+            spec,
+            spawner,
+            log_path,
+            restarts: AtomicU32::new(0),
+            state_tx,
+            state_rx,
+            events: None,
+            pid: AtomicU32::new(0),
+        }
+    }
+
+    /// Attach an event sender so this supervisor broadcasts state/log events.
+    pub fn with_events(mut self, tx: broadcast::Sender<SupervisorEvent>) -> Self {
+        self.events = Some(tx);
+        self
+    }
+
+    /// Current published state.
+    pub fn state(&self) -> InstanceState {
+        *self.state_rx.borrow()
+    }
+
+    /// Current OS pid (None if not running).
+    pub fn pid(&self) -> Option<u32> {
+        match self.pid.load(Ordering::SeqCst) {
+            0 => None,
+            p => Some(p),
+        }
+    }
+
+    /// This instance's index within its worker.
+    pub fn index(&self) -> u32 {
+        self.index
+    }
+
+    /// Worker name this instance belongs to.
+    pub fn worker_name(&self) -> &str {
+        &self.spec.name
     }
 
     pub fn subscribe(&self) -> watch::Receiver<InstanceState> {
@@ -43,7 +86,21 @@ impl InstanceSupervisor {
     }
 
     fn set_state(&self, s: InstanceState) {
+        let from = *self.state_rx.borrow();
+        if from != s && !from.can_transition_to(s) {
+            tracing::warn!("illegal instance transition {from:?} -> {s:?} for {}", self.spec.name);
+        }
         let _ = self.state_tx.send(s);
+        if let Some(tx) = &self.events {
+            if from != s {
+                let _ = tx.send(SupervisorEvent::State {
+                    worker: self.spec.name.clone(),
+                    instance: self.index,
+                    from,
+                    to: s,
+                });
+            }
+        }
     }
 
     fn backoff(&self) -> Backoff {
@@ -90,6 +147,7 @@ impl InstanceSupervisor {
                 }
             };
             self.set_state(InstanceState::Running);
+            self.pid.store(spawned.pid().unwrap_or(0), Ordering::SeqCst);
 
             // Drain stdout AND stderr concurrently with waiting for exit, so a
             // long-running worker that holds its pipes open does not block exit
@@ -99,20 +157,42 @@ impl InstanceSupervisor {
             let err = spawned.stderr.take();
             let sink_out = Arc::clone(&sink);
             let sink_err = Arc::clone(&sink);
+            let ev = self.events.clone();
+            let name = self.spec.name.clone();
             let mut pump = tokio::spawn(async move {
-                let out_fut = async {
+                let out_ev = ev.clone();
+                let out_name = name.clone();
+                let out_fut = async move {
                     if let Some(o) = out {
                         let mut lines = BufReader::new(o).lines();
                         while let Ok(Some(line)) = lines.next_line().await {
                             let _ = sink_out.lock().unwrap().write_line(idx, "stdout", &line);
+                            if let Some(tx) = &out_ev {
+                                let _ = tx.send(SupervisorEvent::Log {
+                                    worker: out_name.clone(),
+                                    instance: idx,
+                                    stream: "stdout".into(),
+                                    line: line.clone(),
+                                });
+                            }
                         }
                     }
                 };
-                let err_fut = async {
+                let err_ev = ev.clone();
+                let err_name = name.clone();
+                let err_fut = async move {
                     if let Some(e) = err {
                         let mut lines = BufReader::new(e).lines();
                         while let Ok(Some(line)) = lines.next_line().await {
                             let _ = sink_err.lock().unwrap().write_line(idx, "stderr", &line);
+                            if let Some(tx) = &err_ev {
+                                let _ = tx.send(SupervisorEvent::Log {
+                                    worker: err_name.clone(),
+                                    instance: idx,
+                                    stream: "stderr".into(),
+                                    line: line.clone(),
+                                });
+                            }
                         }
                     }
                 };
@@ -120,6 +200,7 @@ impl InstanceSupervisor {
             });
 
             let status = spawned.wait().await;
+            self.pid.store(0, Ordering::SeqCst);
 
             // Normally the pipes hit EOF when the child exits and the pump ends on
             // its own. Bound the join so a lingering grandchild holding the pipe
@@ -239,6 +320,31 @@ mod tests {
         assert_eq!(*state_rx.borrow_and_update(), InstanceState::Failed);
         // 1 initial run + 2 retries = 3 spawns; restart_count counts the retries.
         assert_eq!(sup.restart_count(), 2);
+    }
+
+    #[tokio::test]
+    async fn emits_state_events_and_tracks_terminal_state() {
+        use crate::event::SupervisorEvent;
+        let dir = tempfile::tempdir().unwrap();
+        let policy = RestartPolicy { kind: RestartKind::Never, ..Default::default() };
+        let (tx, mut rx) = tokio::sync::broadcast::channel(64);
+        let sup = InstanceSupervisor::new(
+            0,
+            spec("sh", &["-c", "exit 0"], policy),
+            Arc::new(TokioProcess),
+            dir.path().join("t.log"),
+        )
+        .with_events(tx);
+        sup.run_until_terminal().await;
+
+        let mut seen = Vec::new();
+        while let Ok(ev) = rx.try_recv() {
+            if let SupervisorEvent::State { from, to, .. } = ev {
+                seen.push((from, to));
+            }
+        }
+        assert!(seen.contains(&(InstanceState::Starting, InstanceState::Running)));
+        assert!(seen.contains(&(InstanceState::Running, InstanceState::Stopped)));
     }
 
     #[tokio::test]

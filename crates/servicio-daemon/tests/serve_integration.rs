@@ -1,0 +1,252 @@
+// Spin up the server on a temp socket in-process, connect a raw client, and
+// exercise the handshake + ping + shutdown.
+use servicio_daemon_lib::paths::Paths;
+use servicio_daemon_lib::serve::{serve, ServeHandle};
+use servicio_core::worker::{RestartPolicy, RunMode, WorkerSpec};
+use servicio_ipc::Frame;
+use serde_json::json;
+use std::collections::BTreeMap;
+use std::time::Duration;
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::net::UnixStream;
+
+async fn start(paths: Paths, token: String) -> ServeHandle {
+    let h = serve(paths, token).await.expect("serve starts");
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    h
+}
+
+async fn send_recv(sock: &std::path::Path, frames: &[Frame]) -> Vec<Frame> {
+    let stream = UnixStream::connect(sock).await.unwrap();
+    let (rd, mut wr) = stream.into_split();
+    for f in frames {
+        wr.write_all(format!("{}\n", f.to_line()).as_bytes()).await.unwrap();
+    }
+    let mut lines = BufReader::new(rd).lines();
+    let mut out = Vec::new();
+    for _ in 0..frames.len() {
+        if let Ok(Some(line)) = lines.next_line().await {
+            out.push(Frame::from_line(&line).unwrap());
+        }
+    }
+    out
+}
+
+#[tokio::test]
+async fn good_token_then_ping_works() {
+    let dir = tempfile::tempdir().unwrap();
+    let paths = Paths::new(dir.path().to_path_buf());
+    let h = start(paths.clone(), "secret".into()).await;
+    let replies = send_recv(
+        &paths.socket(),
+        &[
+            Frame::Request { id: 1, method: "hello".into(), params: json!({"token": "secret"}) },
+            Frame::Request { id: 2, method: "ping".into(), params: json!({}) },
+        ],
+    )
+    .await;
+    assert!(matches!(replies[0], Frame::Response { id: 1, error: None, .. }));
+    match &replies[1] {
+        Frame::Response { id: 2, result: Some(v), .. } => assert_eq!(v["pong"], true),
+        other => panic!("unexpected: {other:?}"),
+    }
+    h.shutdown().await;
+}
+
+#[tokio::test]
+async fn bad_token_is_rejected() {
+    let dir = tempfile::tempdir().unwrap();
+    let paths = Paths::new(dir.path().to_path_buf());
+    let h = start(paths.clone(), "secret".into()).await;
+    let replies = send_recv(
+        &paths.socket(),
+        &[Frame::Request { id: 1, method: "hello".into(), params: json!({"token": "wrong"}) }],
+    )
+    .await;
+    match &replies[0] {
+        Frame::Response { id: 1, error: Some(e), .. } => assert_eq!(e.code, "unauthorized"),
+        other => panic!("expected unauthorized, got {other:?}"),
+    }
+    h.shutdown().await;
+}
+
+#[tokio::test]
+async fn shutdown_removes_socket() {
+    let dir = tempfile::tempdir().unwrap();
+    let paths = Paths::new(dir.path().to_path_buf());
+    let h = start(paths.clone(), "secret".into()).await;
+    assert!(paths.socket().exists());
+    h.shutdown().await;
+    assert!(!paths.socket().exists());
+}
+
+async fn hello_then(sock: &std::path::Path, reqs: Vec<Frame>) -> Vec<Frame> {
+    let mut frames = vec![Frame::Request { id: 0, method: "hello".into(), params: json!({"token":"secret"}) }];
+    frames.extend(reqs);
+    send_recv(sock, &frames).await
+}
+
+fn sleeper(name: &str) -> WorkerSpec {
+    WorkerSpec {
+        name: name.into(),
+        command: "sh".into(),
+        args: vec!["-c".into(), "sleep 30".into()],
+        working_dir: std::path::PathBuf::from("/"),
+        env: BTreeMap::new(),
+        run_mode: RunMode::Daemon { concurrency: 1 },
+        restart: RestartPolicy::default(),
+        autostart: false,
+        enabled: true,
+    }
+}
+
+#[tokio::test]
+async fn add_then_list_reflects_worker() {
+    let dir = tempfile::tempdir().unwrap();
+    let paths = Paths::new(dir.path().to_path_buf());
+    let h = start(paths.clone(), "secret".into()).await;
+    let replies = hello_then(
+        &paths.socket(),
+        vec![
+            Frame::Request { id: 1, method: "add_worker".into(), params: json!({ "spec": sleeper("q") }) },
+            Frame::Request { id: 2, method: "list_workers".into(), params: json!({}) },
+        ],
+    )
+    .await;
+    match &replies[2] {
+        Frame::Response { id: 2, result: Some(v), .. } => {
+            let arr = v.as_array().unwrap();
+            assert_eq!(arr.len(), 1);
+            assert_eq!(arr[0]["name"], "q");
+        }
+        other => panic!("unexpected list reply: {other:?}"),
+    }
+    h.shutdown().await;
+}
+
+#[tokio::test]
+async fn start_then_stop_worker() {
+    let dir = tempfile::tempdir().unwrap();
+    let paths = Paths::new(dir.path().to_path_buf());
+    let h = start(paths.clone(), "secret".into()).await;
+    let replies = hello_then(
+        &paths.socket(),
+        vec![
+            Frame::Request { id: 1, method: "add_worker".into(), params: json!({ "spec": sleeper("q") }) },
+            Frame::Request { id: 2, method: "start_worker".into(), params: json!({"name":"q"}) },
+            Frame::Request { id: 3, method: "stop_worker".into(), params: json!({"name":"q"}) },
+        ],
+    )
+    .await;
+    assert!(matches!(replies[2], Frame::Response { id: 2, error: None, .. }));
+    assert!(matches!(replies[3], Frame::Response { id: 3, error: None, .. }));
+    h.shutdown().await;
+}
+
+#[tokio::test]
+async fn oversized_line_does_not_crash_server() {
+    let dir = tempfile::tempdir().unwrap();
+    let paths = Paths::new(dir.path().to_path_buf());
+    let h = start(paths.clone(), "secret".into()).await;
+
+    // One connection sends a 2 MiB line with no newline; server should drop it.
+    {
+        let stream = UnixStream::connect(&paths.socket()).await.unwrap();
+        let (_rd, mut wr) = stream.into_split();
+        let big = vec![b'x'; 2 * 1024 * 1024];
+        let _ = wr.write_all(&big).await;
+        let _ = wr.flush().await;
+    }
+    // A fresh connection must still work — proves the daemon is alive.
+    let replies = send_recv(
+        &paths.socket(),
+        &[Frame::Request { id: 1, method: "hello".into(), params: json!({"token":"secret"}) }],
+    )
+    .await;
+    assert!(matches!(replies[0], Frame::Response { id: 1, error: None, .. }));
+    h.shutdown().await;
+}
+
+#[tokio::test]
+async fn subscribe_streams_state_events_for_started_worker() {
+    let dir = tempfile::tempdir().unwrap();
+    let paths = Paths::new(dir.path().to_path_buf());
+    let h = start(paths.clone(), "secret".into()).await;
+
+    // Register the worker (persist only).
+    let _ = hello_then(
+        &paths.socket(),
+        vec![Frame::Request { id: 1, method: "add_worker".into(), params: json!({ "spec": sleeper("q") }) }],
+    )
+    .await;
+
+    // Subscriber connection: hello + subscribe, consume the two acks.
+    let stream = UnixStream::connect(&paths.socket()).await.unwrap();
+    let (rd, mut wr) = stream.into_split();
+    for f in [
+        Frame::Request { id: 0, method: "hello".into(), params: json!({"token":"secret"}) },
+        Frame::Request { id: 1, method: "subscribe".into(), params: json!({"topics":["state"]}) },
+    ] {
+        wr.write_all(format!("{}\n", f.to_line()).as_bytes()).await.unwrap();
+    }
+    let mut lines = BufReader::new(rd).lines();
+    let _ = lines.next_line().await.unwrap(); // hello ack
+    let _ = lines.next_line().await.unwrap(); // subscribe ack
+
+    // Trigger a start on a separate connection.
+    let _ = hello_then(
+        &paths.socket(),
+        vec![Frame::Request { id: 1, method: "start_worker".into(), params: json!({"name":"q"}) }],
+    )
+    .await;
+
+    // Expect a state Event within a couple seconds.
+    let got = tokio::time::timeout(Duration::from_secs(3), async {
+        while let Ok(Some(line)) = lines.next_line().await {
+            if let Ok(Frame::Event { topic, .. }) = Frame::from_line(&line) {
+                if topic == "state" { return true; }
+            }
+        }
+        false
+    })
+    .await
+    .unwrap_or(false);
+    assert!(got, "expected a state event after start");
+    h.shutdown().await;
+}
+
+#[tokio::test]
+async fn shutdown_stops_worker_children() {
+    let dir = tempfile::tempdir().unwrap();
+    let paths = Paths::new(dir.path().to_path_buf());
+    let h = start(paths.clone(), "secret".into()).await;
+
+    let marker = dir.path().join("alive");
+    let mut spec = sleeper("q");
+    spec.args = vec![
+        "-c".into(),
+        format!("while true; do echo x >> {} ; sleep 0.05; done", marker.display()),
+    ];
+
+    let _ = hello_then(
+        &paths.socket(),
+        vec![
+            Frame::Request { id: 1, method: "add_worker".into(), params: json!({ "spec": spec }) },
+            Frame::Request { id: 2, method: "start_worker".into(), params: json!({"name":"q"}) },
+        ],
+    )
+    .await;
+
+    // Let the child run and grow the marker file.
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert!(marker.exists(), "worker should have started writing");
+
+    h.shutdown().await;
+
+    // After shutdown the child must be dead: file size stops changing.
+    tokio::time::sleep(Duration::from_millis(150)).await;
+    let size_a = std::fs::metadata(&marker).map(|m| m.len()).unwrap_or(0);
+    tokio::time::sleep(Duration::from_millis(400)).await;
+    let size_b = std::fs::metadata(&marker).map(|m| m.len()).unwrap_or(0);
+    assert_eq!(size_a, size_b, "worker child kept running after shutdown (orphaned)");
+}

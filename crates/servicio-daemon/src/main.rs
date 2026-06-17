@@ -1,9 +1,6 @@
 use clap::Parser;
-use servicio_core::manager::Manager;
-use servicio_core::process::TokioProcess;
 use servicio_daemon_lib::cli::{Cli, Command};
-use servicio_daemon_lib::{add_worker, db::Db, reconcile_specs};
-use std::sync::Arc;
+use servicio_daemon_lib::{add_worker, db::Db};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -19,17 +16,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("{}  cmd={} {:?}  mode={:?}  autostart={}", w.name, w.command, w.args, w.run_mode, w.autostart);
             }
         }
-        Command::Run => {
-            let specs = reconcile_specs(&cli.db)?;
-            let log_dir = std::env::temp_dir().join("servicio-logs");
-            let mut mgr = Manager::new(Arc::new(TokioProcess), log_dir);
-            for spec in specs {
-                println!("starting '{}'", spec.name);
-                mgr.start_worker(spec).await;
-            }
-            println!("supervising; press Ctrl-C to stop");
+        Command::Serve { base } => {
+            use servicio_daemon_lib::lock::InstanceLock;
+            use servicio_daemon_lib::paths::Paths;
+            use servicio_daemon_lib::serve::serve;
+            use servicio_daemon_lib::token::load_or_create;
+
+            let paths = Paths::new(base.unwrap_or_else(Paths::default_base));
+            std::fs::create_dir_all(&paths.base)?;
+            let _lock = InstanceLock::acquire(&paths.lock())?;
+            let token = load_or_create(&paths.token())?;
+            let handle = serve(paths, token).await?;
+            println!("servicio daemon listening; press Ctrl-C to stop");
             tokio::signal::ctrl_c().await?;
-            mgr.stop_all().await;
+            handle.shutdown().await;
             println!("stopped");
         }
     }

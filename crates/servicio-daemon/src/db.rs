@@ -58,6 +58,25 @@ impl Db {
         self.query("SELECT spec_json FROM workers WHERE autostart = 1 AND enabled = 1 ORDER BY name")
     }
 
+    /// Fetch one worker by name.
+    pub fn get_worker(&self, name: &str) -> rusqlite::Result<Option<WorkerSpec>> {
+        let mut stmt = self.conn.prepare("SELECT spec_json FROM workers WHERE name = ?1")?;
+        let mut rows = stmt.query_map([name], |row| {
+            let json: String = row.get(0)?;
+            Ok(serde_json::from_str::<WorkerSpec>(&json).expect("stored spec parses"))
+        })?;
+        match rows.next() {
+            Some(r) => Ok(Some(r?)),
+            None => Ok(None),
+        }
+    }
+
+    /// Delete a worker by name; returns true if a row was removed.
+    pub fn remove_worker(&self, name: &str) -> rusqlite::Result<bool> {
+        let n = self.conn.execute("DELETE FROM workers WHERE name = ?1", [name])?;
+        Ok(n > 0)
+    }
+
     fn query(&self, sql: &str) -> rusqlite::Result<Vec<WorkerSpec>> {
         let mut stmt = self.conn.prepare(sql)?;
         let rows = stmt.query_map([], |row| {
@@ -120,5 +139,15 @@ mod tests {
         db.upsert_worker(&no).unwrap();
         let names: Vec<_> = db.autostart_workers().unwrap().into_iter().map(|w| w.name).collect();
         assert_eq!(names, vec!["yes".to_string()]);
+    }
+
+    #[test]
+    fn get_and_remove_worker() {
+        let db = Db::open_in_memory().unwrap();
+        db.upsert_worker(&spec("q")).unwrap();
+        assert!(db.get_worker("q").unwrap().is_some());
+        assert!(db.remove_worker("q").unwrap());
+        assert!(db.get_worker("q").unwrap().is_none());
+        assert!(!db.remove_worker("q").unwrap());
     }
 }

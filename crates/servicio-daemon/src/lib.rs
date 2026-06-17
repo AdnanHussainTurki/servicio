@@ -1,5 +1,9 @@
 pub mod cli;
 pub mod db;
+pub mod lock;
+pub mod paths;
+pub mod serve;
+pub mod token;
 
 use db::Db;
 use servicio_core::worker::{RestartPolicy, RunMode, WorkerSpec};
