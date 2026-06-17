@@ -4,7 +4,7 @@ pub mod db;
 use db::Db;
 use servicio_core::worker::{RestartPolicy, RunMode, WorkerSpec};
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 /// Add (or replace) a worker definition in the database.
 #[allow(clippy::too_many_arguments)]
@@ -13,7 +13,7 @@ pub fn add_worker(
     name: &str,
     command: &str,
     args: &[String],
-    working_dir: &PathBuf,
+    working_dir: &Path,
     concurrency: u32,
     autostart: bool,
 ) -> rusqlite::Result<()> {
@@ -21,7 +21,7 @@ pub fn add_worker(
         name: name.to_string(),
         command: command.to_string(),
         args: args.to_vec(),
-        working_dir: working_dir.clone(),
+        working_dir: working_dir.to_path_buf(),
         env: BTreeMap::new(),
         run_mode: RunMode::Daemon { concurrency },
         restart: RestartPolicy::default(),

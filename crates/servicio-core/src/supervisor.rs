@@ -60,9 +60,14 @@ impl InstanceSupervisor {
     pub async fn run_until_terminal(&self) {
         let backoff = self.backoff();
         let mut retries: u32 = 0;
-        let sink = Arc::new(std::sync::Mutex::new(
-            LogSink::new(&self.log_path, 10 * 1024 * 1024, 5).expect("log sink should open"),
-        ));
+        let sink = match LogSink::new(&self.log_path, 10 * 1024 * 1024, 5) {
+            Ok(s) => Arc::new(std::sync::Mutex::new(s)),
+            Err(e) => {
+                tracing::error!("failed to open log sink at {:?}: {e}", self.log_path);
+                self.set_state(InstanceState::Failed);
+                return;
+            }
+        };
 
         loop {
             self.set_state(InstanceState::Starting);
