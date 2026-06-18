@@ -17,6 +17,11 @@ export function SettingsView() {
   const [updateMsg, setUpdateMsg] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
 
+  // Workers config import/export
+  const [note, setNote] = useState<string | null>(null);
+  const [noteTone, setNoteTone] = useState<"ok" | "err">("ok");
+  const [ioBusy, setIoBusy] = useState(false);
+
   // Debug state
   const [log, setLog] = useState<string | null>(null);
   const [logError, setLogError] = useState<string | null>(null);
@@ -84,6 +89,42 @@ export function SettingsView() {
       setUpdateMsg(String(e));
     } finally {
       setChecking(false);
+    }
+  };
+
+  const onExport = async () => {
+    if (ioBusy) return;
+    setIoBusy(true);
+    try {
+      const p = await api.saveDialog("servicio-workers.json");
+      if (p) {
+        const n = await api.exportWorkersTo(p);
+        setNoteTone("ok");
+        setNote(`Exported ${n} ${n === 1 ? "worker" : "workers"} to ${p}`);
+      }
+    } catch (e) {
+      setNoteTone("err");
+      setNote(String(e));
+    } finally {
+      setIoBusy(false);
+    }
+  };
+
+  const onImport = async () => {
+    if (ioBusy) return;
+    setIoBusy(true);
+    try {
+      const p = await api.openFileDialog();
+      if (p) {
+        const n = await api.importWorkersFrom(p);
+        setNoteTone("ok");
+        setNote(`Imported ${n} ${n === 1 ? "worker" : "workers"} — they appear on the dashboard.`);
+      }
+    } catch (e) {
+      setNoteTone("err");
+      setNote(String(e));
+    } finally {
+      setIoBusy(false);
     }
   };
 
@@ -240,6 +281,69 @@ export function SettingsView() {
           <div className="mt-4 ml-2 rounded-lg border border-stone-200/70 bg-stone-50/60 px-3 py-2
             font-mono text-[11px] leading-snug text-stone-600 dark:border-white/[0.06] dark:bg-white/[0.02] dark:text-stone-300">
             {updateMsg}
+          </div>
+        )}
+      </section>
+
+      {/* Workers config panel */}
+      <section
+        className="relative mt-5 overflow-hidden rounded-2xl border border-stone-200/80 bg-white/70 p-5 shadow-sm
+          backdrop-blur-sm dark:border-white/[0.07] dark:bg-white/[0.02]"
+      >
+        <span
+          className="absolute inset-y-0 left-0 w-[3px] bg-signal-500/70"
+          aria-hidden
+        />
+
+        <div className="flex items-start justify-between gap-4 pl-2">
+          <div className="min-w-0">
+            <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-signal-600 dark:text-signal-400">
+              portability
+            </div>
+            <h2 className="mt-1 font-display text-lg font-semibold text-stone-900 dark:text-stone-50">
+              Workers config
+            </h2>
+            <p className="mt-1.5 max-w-md text-sm leading-relaxed text-stone-500 dark:text-stone-400">
+              Back up or migrate your fleet. Files are a JSON list of worker definitions —
+              import merges them onto the dashboard.
+            </p>
+          </div>
+
+          <div className="flex shrink-0 gap-2">
+            <button
+              type="button"
+              onClick={() => void onExport()}
+              disabled={ioBusy}
+              className="rounded-lg border border-stone-300/80 bg-white px-3 py-1.5 font-mono
+                text-[11px] uppercase tracking-widest text-stone-600 shadow-sm transition-colors
+                hover:border-signal-500/60 hover:text-signal-600 disabled:opacity-40
+                dark:border-white/10 dark:bg-white/[0.03] dark:text-stone-300 dark:hover:text-signal-400"
+            >
+              export
+            </button>
+            <button
+              type="button"
+              onClick={() => void onImport()}
+              disabled={ioBusy}
+              className="rounded-lg border border-stone-300/80 bg-white px-3 py-1.5 font-mono
+                text-[11px] uppercase tracking-widest text-stone-600 shadow-sm transition-colors
+                hover:border-signal-500/60 hover:text-signal-600 disabled:opacity-40
+                dark:border-white/10 dark:bg-white/[0.03] dark:text-stone-300 dark:hover:text-signal-400"
+            >
+              import
+            </button>
+          </div>
+        </div>
+
+        {note && (
+          <div
+            className={`mt-4 ml-2 rounded-lg border px-3 py-2 font-mono text-[11px] leading-snug ${
+              noteTone === "err"
+                ? "border-rose-500/30 bg-rose-500/5 text-rose-600 dark:text-rose-300"
+                : "border-stone-200/70 bg-stone-50/60 text-stone-600 dark:border-white/[0.06] dark:bg-white/[0.02] dark:text-stone-300"
+            }`}
+          >
+            {note}
           </div>
         )}
       </section>

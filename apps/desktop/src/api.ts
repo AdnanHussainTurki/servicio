@@ -43,6 +43,12 @@ export const api = {
       return typeof r === "string" ? r : null;
     } catch { return null; }
   },
+  saveDialog: async (defaultName: string): Promise<string | null> => {
+    try { const { save } = await import("@tauri-apps/plugin-dialog"); const p = await save({ defaultPath: defaultName, filters: [{ name: "JSON", extensions: ["json"] }] }); return p ?? null; } catch { return null; }
+  },
+  openFileDialog: async (): Promise<string | null> => {
+    try { const { open } = await import("@tauri-apps/plugin-dialog"); const r = await open({ multiple: false, filters: [{ name: "JSON", extensions: ["json"] }] }); return typeof r === "string" ? r : null; } catch { return null; }
+  },
   installService: () => invoke<void>("install_service"),
   uninstallService: () => invoke<void>("uninstall_service"),
   checkUpdate: async (): Promise<string | null> => {

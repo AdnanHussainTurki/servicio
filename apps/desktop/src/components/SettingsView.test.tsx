@@ -3,6 +3,10 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { SettingsView } from "./SettingsView";
 
 const installService = vi.fn().mockResolvedValue(undefined);
+const saveDialog = vi.fn().mockResolvedValue(null);
+const openFileDialog = vi.fn().mockResolvedValue(null);
+const exportWorkersTo = vi.fn().mockResolvedValue(0);
+const importWorkersFrom = vi.fn().mockResolvedValue(0);
 vi.mock("../api", () => ({
   api: {
     serviceStatus: vi.fn().mockResolvedValue({ installed: false }),
@@ -17,6 +21,10 @@ vi.mock("../api", () => ({
       running_count: 1,
     }),
     daemonLog: vi.fn().mockResolvedValue({ log: "hello daemon" }),
+    saveDialog: (...a: unknown[]) => saveDialog(...a),
+    openFileDialog: (...a: unknown[]) => openFileDialog(...a),
+    exportWorkersTo: (...a: unknown[]) => exportWorkersTo(...a),
+    importWorkersFrom: (...a: unknown[]) => importWorkersFrom(...a),
   },
 }));
 
@@ -37,5 +45,14 @@ describe("SettingsView", () => {
     render(<SettingsView />);
     await waitFor(() => expect(screen.getByText("9.9.9")).toBeInTheDocument());
     expect(screen.getByText("connected")).toBeInTheDocument();
+  });
+
+  it("exports workers when the save dialog resolves a path", async () => {
+    saveDialog.mockResolvedValueOnce("/tmp/x.json");
+    exportWorkersTo.mockResolvedValueOnce(3);
+    render(<SettingsView />);
+    fireEvent.click(await screen.findByRole("button", { name: /export/i }));
+    await waitFor(() => expect(exportWorkersTo).toHaveBeenCalledWith("/tmp/x.json"));
+    await waitFor(() => expect(screen.getByText(/Exported 3 workers/)).toBeInTheDocument());
   });
 });
