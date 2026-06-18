@@ -10,6 +10,8 @@ export function SettingsView() {
   const [status, setStatus] = useState<ServiceState | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [updateMsg, setUpdateMsg] = useState<string | null>(null);
+  const [checking, setChecking] = useState(false);
 
   const refresh = async () => {
     try {
@@ -22,6 +24,19 @@ export function SettingsView() {
   useEffect(() => {
     void refresh();
   }, []);
+
+  const onCheckUpdate = async () => {
+    if (checking) return;
+    setChecking(true);
+    setUpdateMsg(null);
+    try {
+      setUpdateMsg(await api.checkUpdate());
+    } catch (e) {
+      setUpdateMsg(String(e));
+    } finally {
+      setChecking(false);
+    }
+  };
 
   const supported = status?.supported !== false;
   const installed = status?.installed ?? false;
@@ -132,6 +147,50 @@ export function SettingsView() {
           <div className="mt-3 ml-2 rounded-lg border border-rose-500/30 bg-rose-500/5 px-3 py-2
             font-mono text-[11px] leading-snug text-rose-600 dark:text-rose-300">
             {error}
+          </div>
+        )}
+      </section>
+
+      {/* Updates panel */}
+      <section
+        className="relative mt-5 overflow-hidden rounded-2xl border border-stone-200/80 bg-white/70 p-5 shadow-sm
+          backdrop-blur-sm dark:border-white/[0.07] dark:bg-white/[0.02]"
+      >
+        <span
+          className="absolute inset-y-0 left-0 w-[3px] bg-signal-500/70"
+          aria-hidden
+        />
+
+        <div className="flex items-start justify-between gap-4 pl-2">
+          <div className="min-w-0">
+            <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-signal-600 dark:text-signal-400">
+              software updates
+            </div>
+            <h2 className="mt-1 font-display text-lg font-semibold text-stone-900 dark:text-stone-50">
+              Check for updates
+            </h2>
+            <p className="mt-1.5 max-w-md text-sm leading-relaxed text-stone-500 dark:text-stone-400">
+              Ask the update server whether a newer Servicio build is available.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={onCheckUpdate}
+            disabled={checking}
+            className="shrink-0 rounded-lg border border-stone-300/80 bg-white px-3 py-1.5 font-mono
+              text-[11px] uppercase tracking-widest text-stone-600 shadow-sm transition-colors
+              hover:border-signal-500/60 hover:text-signal-600 disabled:opacity-40
+              dark:border-white/10 dark:bg-white/[0.03] dark:text-stone-300 dark:hover:text-signal-400"
+          >
+            {checking ? "checking…" : "check"}
+          </button>
+        </div>
+
+        {updateMsg && (
+          <div className="mt-4 ml-2 rounded-lg border border-stone-200/70 bg-stone-50/60 px-3 py-2
+            font-mono text-[11px] leading-snug text-stone-600 dark:border-white/[0.06] dark:bg-white/[0.02] dark:text-stone-300">
+            {updateMsg}
           </div>
         )}
       </section>
