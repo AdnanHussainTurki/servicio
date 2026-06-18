@@ -1316,6 +1316,24 @@ git add README.md .gitignore && git commit -m "docs(gui): phase 2b readme + run 
 - OS-service install, signing/notarization, installers, survive-GUI-close daemon.
 - Full E2E (tauri-driver/Playwright).
 
+## Deferred to Phase 3 (from final review)
+
+All 10 tasks implemented; backend bridge tests (vs real daemon) + 6 Vitest tests pass, both
+builds clean, engine workspace unaffected (53 tests, Tauri crate standalone). No Critical
+issues. The `tauri dev` window render + live emit/listen round-trip is the only piece not
+auto-verifiable headless (needs a manual launch). Deferred (out of 2b scope, Phase 3):
+- **User-visible error feedback.** A permanent `ensure_daemon` failure leaves a live but
+  inert window (only the footer dot signals it); in-window command errors are swallowed by
+  fire-and-forget `invoke`. Add a toast/error surface + retry `ensure_daemon`.
+- **Sidecar lifecycle:** spawned daemon is detached (orphans after GUI close — matches the
+  deferred "survive-close" decision) and resolved by bare PATH name in dev. Packaging phase
+  wires the bundled sidecar path + a managed lifecycle.
+- **Event/seed ordering:** a `state` event for a worker not yet seeded by `list_workers` is
+  dropped (reconciled within the 2s poll); fine for 2b, revisit if the poll is removed.
+- **Test gaps:** event-pump end-to-end, sidecar spawn, command-before-state-managed,
+  frontend `subscribeEvents` listener wiring.
+- Cosmetic: `tauri.conf.json` `identifier` is the default `com.tauri.dev` (fix at packaging).
+
 ## Self-review notes
 - **Spec coverage:** architecture/bridge (§3–4) → Tasks 1–3; frontend stack/screens (§5) →
   Tasks 4–8; testing (§6) → embedded; build/sidecar (§3,§7) → Tasks 0,1,3,9. Dashboard,
