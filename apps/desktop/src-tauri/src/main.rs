@@ -44,11 +44,17 @@ fn main() {
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 let base = default_base();
+                let daemon_program = std::env::current_exe()
+                    .ok()
+                    .and_then(|p| p.parent().map(|d| d.join("servicio-daemon")))
+                    .filter(|p| p.exists())
+                    .map(|p| p.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| "servicio-daemon".to_string());
                 let token = {
                     let mut attempt = 0;
                     loop {
                         attempt += 1;
-                        match ensure_daemon(&base, "servicio-daemon").await {
+                        match ensure_daemon(&base, daemon_program.as_str()).await {
                             Ok(t) => break t,
                             Err(e) if attempt < 3 => {
                                 eprintln!("daemon not ready (attempt {attempt}/3): {e}");
