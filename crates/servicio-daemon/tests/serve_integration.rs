@@ -250,3 +250,28 @@ async fn shutdown_stops_worker_children() {
     let size_b = std::fs::metadata(&marker).map(|m| m.len()).unwrap_or(0);
     assert_eq!(size_a, size_b, "worker child kept running after shutdown (orphaned)");
 }
+
+#[tokio::test]
+async fn metrics_method_returns_series_for_running_worker() {
+    let dir = tempfile::tempdir().unwrap();
+    let paths = Paths::new(dir.path().to_path_buf());
+    let h = start(paths.clone(), "secret".into()).await;
+    let spec = sleeper("q");
+    let _ = hello_then(&paths.socket(), vec![
+        Frame::Request { id: 1, method: "add_worker".into(), params: json!({"spec": spec}) },
+        Frame::Request { id: 2, method: "start_worker".into(), params: json!({"name":"q"}) },
+    ]).await;
+    tokio::time::sleep(std::time::Duration::from_millis(5000)).await; // >=2 sampler ticks
+    let replies = hello_then(&paths.socket(), vec![
+        Frame::Request { id: 1, method: "metrics".into(), params: json!({"worker":"q","since_secs":3600}) },
+    ]).await;
+    match &replies[1] {
+        Frame::Response { id: 1, result: Some(v), .. } => {
+            let arr = v.as_array().unwrap();
+            assert!(!arr.is_empty(), "expected >=1 instance series");
+            assert!(arr[0]["points"].as_array().unwrap().len() >= 1, "expected >=1 sample point");
+        }
+        other => panic!("unexpected: {other:?}"),
+    }
+    h.shutdown().await;
+}

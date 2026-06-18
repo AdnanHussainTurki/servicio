@@ -66,6 +66,11 @@ pub async fn serve(paths: Paths, token: String) -> std::io::Result<ServeHandle> 
         version: env!("CARGO_PKG_VERSION").to_string(),
     });
 
+    {
+        let d = Arc::clone(&daemon);
+        tokio::spawn(async move { crate::sampler::run_sampler_for(d, 3600).await; });
+    }
+
     let (shutdown_tx, shutdown_rx) = watch::channel(false);
     let socket_path = paths.socket();
     let accept_task = tokio::spawn(accept_loop(listener, Arc::clone(&daemon), shutdown_rx));
@@ -167,6 +172,14 @@ fn spawn_forwarder(
                             Frame::Event {
                                 topic: "log".into(),
                                 payload: serde_json::to_value(LogEvent { worker, instance, stream, line }).unwrap(),
+                            }
+                        }
+                        SupervisorEvent::Metric { worker, instance, ts, cpu, mem } => {
+                            if !topics.iter().any(|t| t == "metric") { continue; }
+                            if let Some(f) = &worker_filter { if f != &worker { continue; } }
+                            Frame::Event {
+                                topic: "metric".into(),
+                                payload: serde_json::to_value(servicio_ipc::types::MetricEvent { worker, instance, ts, cpu, mem }).unwrap(),
                             }
                         }
                     };
@@ -302,6 +315,25 @@ async fn dispatch(daemon: &Arc<Daemon>, id: u64, method: &str, params: serde_jso
             let mut mgr = daemon.manager.lock().await;
             let stopped = mgr.stop_worker(&name).await;
             Frame::ok(id, json!({"stopped": stopped}))
+        }
+        "metrics" => {
+            let name = params.get("worker").and_then(|n| n.as_str()).unwrap_or("").to_string();
+            let since = params.get("since_secs").and_then(|n| n.as_u64()).unwrap_or(0);
+            let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+            let floor = if since == 0 { 0 } else { now.saturating_sub(since) };
+            let db = daemon.db.lock().await;
+            match db.query_metrics(&name, floor) {
+                Ok(rows) => {
+                    let series: Vec<servicio_ipc::types::MetricSeries> = rows.into_iter().map(|(instance, pts)| {
+                        servicio_ipc::types::MetricSeries {
+                            instance,
+                            points: pts.into_iter().map(|(ts,cpu,mem)| servicio_ipc::types::MetricPoint { ts, cpu, mem }).collect(),
+                        }
+                    }).collect();
+                    match serde_json::to_value(series) { Ok(v) => Frame::ok(id, v), Err(e) => Frame::err(id, "internal", &e.to_string()) }
+                }
+                Err(e) => Frame::err(id, "db_error", &e.to_string()),
+            }
         }
         other => Frame::err(id, "unknown_method", &format!("no such method: {other}")),
     }

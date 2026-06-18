@@ -2,6 +2,7 @@ pub mod cli;
 pub mod db;
 pub mod lock;
 pub mod paths;
+pub mod sampler;
 pub mod serve;
 pub mod token;
 
