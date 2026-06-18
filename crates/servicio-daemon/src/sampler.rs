@@ -42,7 +42,7 @@ pub async fn run_sampler_for(daemon: Arc<Daemon>, retain_secs: u64) {
             }
         }
         ticks += 1;
-        if ticks % 30 == 0 {
+        if ticks.is_multiple_of(30) {
             let cutoff = now.saturating_sub(retain_secs);
             let db = daemon.db.lock().await;
             let _ = db.prune_metrics(cutoff);

@@ -121,7 +121,7 @@ fn config_default(cfg: &str, key: &str) -> Option<String> {
     let comma = rest.find(',')?;
     let after = &rest[comma + 1..];
     // grab the first quoted literal
-    let start = after.find(|c| c == '\'' || c == '"')?;
+    let start = after.find(['\'', '"'])?;
     let quote = after.as_bytes()[start] as char;
     let after = &after[start + 1..];
     let end = after.find(quote)?;

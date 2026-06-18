@@ -2,6 +2,11 @@ use rusqlite::Connection;
 use servicio_core::worker::WorkerSpec;
 use std::path::Path;
 
+/// A single metric sample: (timestamp, cpu, mem).
+pub type MetricRow = (u64, f32, u64);
+/// Metric samples for one instance: (instance, points).
+pub type InstanceSeries = (u32, Vec<MetricRow>);
+
 /// SQLite persistence for worker definitions. Source of truth for the daemon.
 pub struct Db {
     conn: Connection,
@@ -73,7 +78,7 @@ impl Db {
         &self,
         worker: &str,
         since: u64,
-    ) -> rusqlite::Result<Vec<(u32, Vec<(u64, f32, u64)>)>> {
+    ) -> rusqlite::Result<Vec<InstanceSeries>> {
         let mut stmt = self.conn.prepare(
             "SELECT instance, ts, cpu, mem FROM metrics WHERE worker=?1 AND ts>=?2 ORDER BY instance, ts")?;
         let rows = stmt.query_map(rusqlite::params![worker, since as i64], |r| {
@@ -84,7 +89,7 @@ impl Db {
                 r.get::<_, i64>(3)? as u64,
             ))
         })?;
-        let mut out: Vec<(u32, Vec<(u64, f32, u64)>)> = Vec::new();
+        let mut out: Vec<InstanceSeries> = Vec::new();
         for row in rows {
             let (inst, ts, cpu, mem) = row?;
             match out.last_mut() {
