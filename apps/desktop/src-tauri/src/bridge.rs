@@ -1,7 +1,21 @@
+use crate::sidecar::run_daemon_subcommand;
 use crate::state::AppState;
 use serde::Serialize;
 use servicio_core::worker::WorkerSpec;
 use servicio_ipc::types::WorkerStatus;
+
+pub fn service_status() -> Result<serde_json::Value, String> {
+    let out = run_daemon_subcommand(&["service-status"]).map_err(|e| e.to_string())?;
+    serde_json::from_str(out.trim()).map_err(|e| format!("parse service-status: {e} (got: {out})"))
+}
+
+pub fn install_service() -> Result<(), String> {
+    run_daemon_subcommand(&["install-service"]).map(|_| ()).map_err(|e| e.to_string())
+}
+
+pub fn uninstall_service() -> Result<(), String> {
+    run_daemon_subcommand(&["uninstall-service"]).map(|_| ()).map_err(|e| e.to_string())
+}
 
 pub async fn list_workers(state: &AppState) -> Result<Vec<WorkerStatus>, String> {
     let mut client = state.client.lock().await;

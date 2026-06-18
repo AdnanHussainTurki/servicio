@@ -25,6 +25,9 @@ export const api = {
   addWorker: (spec: AddWorkerSpec) => invoke<void>("add_worker", { spec }),
   detectWorkers: (path: string) => invoke<SuggestionDraft[]>("detect_workers", { path }),
   metrics: (worker: string, sinceSecs: number) => invoke<{ instance: number; points: MetricPointT[] }[]>("metrics", { worker, sinceSecs }),
+  serviceStatus: () => invoke<{ installed: boolean; supported?: boolean }>("service_status"),
+  installService: () => invoke<void>("install_service"),
+  uninstallService: () => invoke<void>("uninstall_service"),
 };
 
 /** Wire daemon events into the store. Call once at app start. */
