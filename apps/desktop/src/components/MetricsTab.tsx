@@ -2,6 +2,11 @@ import { useEffect } from "react";
 import { useStore } from "../store";
 import { api } from "../api";
 import { Sparkline } from "./Sparkline";
+import type { MetricPointT } from "../types";
+
+// Stable empty reference — see LogView: `?? []` inside a Zustand selector makes a new array
+// each render → React 19 infinite loop. Default outside the selector against this constant.
+const EMPTY_POINTS: MetricPointT[] = [];
 
 const CPU_STROKE = "#f97316"; // copper signal
 const MEM_STROKE = "#38bdf8"; // telemetry cyan
@@ -43,7 +48,7 @@ function Gauge({
 }
 
 export function MetricsTab({ worker }: { worker: string }) {
-  const points = useStore((s) => s.metrics[worker] ?? []);
+  const points = useStore((s) => s.metrics[worker]) ?? EMPTY_POINTS;
   const applyEvent = useStore((s) => s.applyEvent);
 
   // Seed the store buffer from history on mount; live `metric` events keep it fresh.

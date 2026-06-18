@@ -1,5 +1,6 @@
 export type InstanceState =
-  | "stopped" | "starting" | "running" | "stopping" | "crashed" | "backoff" | "failed";
+  | "stopped" | "starting" | "running" | "stopping" | "crashed" | "backoff" | "failed"
+  | "idle" | "completed";
 
 export interface InstanceStatus {
   index: number;

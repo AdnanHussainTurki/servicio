@@ -11,6 +11,8 @@ export const SIGNAL_OF: Record<InstanceState, Signal> = {
   stopped: "idle",
   crashed: "down",
   failed: "down",
+  idle: "idle",
+  completed: "idle",
 };
 
 /** Severity order — first match wins when summarizing a worker's instances. */
@@ -21,6 +23,8 @@ const ORDER: InstanceState[] = [
   "starting",
   "stopping",
   "running",
+  "idle",
+  "completed",
   "stopped",
 ];
 
