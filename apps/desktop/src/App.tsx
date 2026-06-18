@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useStore } from "./store";
-import { api, subscribeEvents } from "./api";
+import { api, subscribeEvents, withError } from "./api";
 import { Sidebar } from "./components/Sidebar";
 import { StatusFooter } from "./components/StatusFooter";
 import { Dashboard } from "./components/Dashboard";
@@ -43,6 +43,13 @@ export default function App() {
     setAdding(false);
     setEditing(null);
     setEditSpec(null);
+  }
+
+  function deleteWorker(name: string, opts?: { onSuccess?: () => void }) {
+    if (!confirm(`Delete worker "${name}"? This stops it and removes its config.`)) return;
+    void withError(api.removeWorker(name)).then((r) => {
+      if (r !== undefined) opts?.onSuccess?.();
+    });
   }
 
   useEffect(() => {
@@ -94,7 +101,12 @@ export default function App() {
               </div>
             )
           ) : detail ? (
-            <WorkerDetail name={detail} onBack={() => setDetail(null)} onEdit={() => setEditing(detail)} />
+            <WorkerDetail
+              name={detail}
+              onBack={() => setDetail(null)}
+              onEdit={() => setEditing(detail)}
+              onDelete={() => deleteWorker(detail, { onSuccess: () => setDetail(null) })}
+            />
           ) : view === "groups" ? (
             <GroupsView onOpenWorker={setDetail} onAddWorker={() => setAdding(true)} />
           ) : (
@@ -102,6 +114,7 @@ export default function App() {
               onOpen={setDetail}
               onAdd={() => setAdding(true)}
               onEditWorker={(name) => setEditing(name)}
+              onDeleteWorker={(name) => deleteWorker(name)}
             />
           )}
         </main>

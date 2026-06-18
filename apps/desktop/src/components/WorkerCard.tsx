@@ -21,12 +21,14 @@ export function WorkerCard({
   onStart,
   onStop,
   onEdit,
+  onDelete,
 }: {
   w: WorkerStatus;
   onOpen: () => void;
   onStart: () => void;
   onStop: () => void;
   onEdit?: () => void;
+  onDelete?: () => void;
 }) {
   const state = worstState(w);
   const s = styleFor(state);
@@ -130,6 +132,18 @@ export function WorkerCard({
           >
             ✎
           </button>
+          {onDelete && (
+            <button
+              className="rounded-md bg-rose-500/10 px-2.5 py-1.5 font-mono text-xs font-semibold
+                text-rose-700 ring-1 ring-inset ring-rose-500/25 transition hover:bg-rose-500/20
+                dark:text-rose-300"
+              onClick={() => onDelete()}
+              aria-label={`Delete ${w.name}`}
+              title="Delete worker"
+            >
+              🗑
+            </button>
+          )}
         </div>
       </div>
     </div>
