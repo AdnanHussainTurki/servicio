@@ -4,8 +4,22 @@ use std::path::PathBuf;
 
 fn default_concurrency() -> u32 { 1 }
 
-/// How a worker is run. Phase 1 supports Daemon only; later phases add
-/// Scheduled and Batch as new variants.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Schedule {
+    Cron(String),
+    IntervalSecs(u64),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OverlapPolicy {
+    Skip,
+    Queue,
+    KillPrevious,
+}
+
+/// How a worker is run.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum RunMode {
@@ -13,7 +27,19 @@ pub enum RunMode {
         #[serde(default = "default_concurrency")]
         concurrency: u32,
     },
+    Scheduled {
+        schedule: Schedule,
+        #[serde(default = "default_overlap")]
+        overlap: OverlapPolicy,
+    },
+    Batch {
+        run_count: u32,
+        #[serde(default)]
+        delay_secs: u64,
+    },
 }
+
+fn default_overlap() -> OverlapPolicy { OverlapPolicy::Skip }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -91,5 +117,29 @@ mod tests {
     fn concurrency_defaults_to_one_when_unset() {
         let mode: RunMode = serde_json::from_str(r#"{"type":"daemon"}"#).unwrap();
         assert_eq!(mode, RunMode::Daemon { concurrency: 1 });
+    }
+
+    #[test]
+    fn scheduled_mode_roundtrips() {
+        let m = RunMode::Scheduled {
+            schedule: Schedule::Cron("0 3 * * *".into()),
+            overlap: OverlapPolicy::Skip,
+        };
+        let back: RunMode = serde_json::from_str(&serde_json::to_string(&m).unwrap()).unwrap();
+        assert_eq!(m, back);
+    }
+
+    #[test]
+    fn batch_mode_roundtrips() {
+        let m = RunMode::Batch { run_count: 5, delay_secs: 10 };
+        let back: RunMode = serde_json::from_str(&serde_json::to_string(&m).unwrap()).unwrap();
+        assert_eq!(m, back);
+    }
+
+    #[test]
+    fn interval_schedule_roundtrips() {
+        let s = Schedule::IntervalSecs(30);
+        let back: Schedule = serde_json::from_str(&serde_json::to_string(&s).unwrap()).unwrap();
+        assert_eq!(s, back);
     }
 }

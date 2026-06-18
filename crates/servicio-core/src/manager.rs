@@ -42,6 +42,7 @@ impl Manager {
         }
         let concurrency = match spec.run_mode {
             RunMode::Daemon { concurrency } => concurrency.max(1),
+            _ => 1, // scheduled/batch refined in a later task
         };
         let mut supervisors = Vec::new();
         let mut handles = Vec::new();
