@@ -14,3 +14,7 @@ apps/desktop/src-tauri/binaries/
 /*.png
 .secrets/
 .claude/
+
+.vscode/
+CLAUDE.md
+docs/superpowers/
