@@ -17,9 +17,9 @@ const MB = 1048576;
 
 function seed() {
   useStore.getState().setWorkers([
-    { name: "queue", group: "billing", tags: [], run_mode: { type: "daemon", concurrency: 1 } as any, instances: [{ index: 0, state: "running", restart_count: 0, pid: 1 }] },
-    { name: "cron", group: "billing", tags: [], run_mode: { type: "daemon", concurrency: 1 } as any, instances: [{ index: 0, state: "running", restart_count: 0, pid: 3 }] },
-    { name: "loose", group: null, tags: [], run_mode: { type: "daemon", concurrency: 1 } as any, instances: [{ index: 0, state: "running", restart_count: 0, pid: 2 }] },
+    { name: "queue", group: "billing", tags: [], run_mode: { type: "daemon", concurrency: 1 }, instances: [{ index: 0, state: "running", restart_count: 0, pid: 1 }] },
+    { name: "cron", group: "billing", tags: [], run_mode: { type: "daemon", concurrency: 1 }, instances: [{ index: 0, state: "running", restart_count: 0, pid: 3 }] },
+    { name: "loose", group: null, tags: [], run_mode: { type: "daemon", concurrency: 1 }, instances: [{ index: 0, state: "running", restart_count: 0, pid: 2 }] },
   ]);
   // billing → 100 MB + 200 MB = 300 MB; loose → 25 MB
   useStore.getState().applyEvent({ kind: "metric", worker: "queue", instance: 0, ts: 1, cpu: 1, mem: 100 * MB });
@@ -36,9 +36,9 @@ describe("GroupsView", () => {
 
   it("shows a folder card per group and drills into one", () => {
     useStore.getState().setWorkers([
-      { name: "queue", group: "billing", tags: [], run_mode: { type: "daemon", concurrency: 1 } as any, instances: [{ index: 0, state: "running", restart_count: 0, pid: 1 }] },
-      { name: "cron", group: "billing", tags: [], run_mode: { type: "daemon", concurrency: 1 } as any, instances: [{ index: 0, state: "stopped", restart_count: 0, pid: null }] },
-      { name: "loose", group: null, tags: [], run_mode: { type: "daemon", concurrency: 1 } as any, instances: [{ index: 0, state: "running", restart_count: 0, pid: 2 }] },
+      { name: "queue", group: "billing", tags: [], run_mode: { type: "daemon", concurrency: 1 }, instances: [{ index: 0, state: "running", restart_count: 0, pid: 1 }] },
+      { name: "cron", group: "billing", tags: [], run_mode: { type: "daemon", concurrency: 1 }, instances: [{ index: 0, state: "stopped", restart_count: 0, pid: null }] },
+      { name: "loose", group: null, tags: [], run_mode: { type: "daemon", concurrency: 1 }, instances: [{ index: 0, state: "running", restart_count: 0, pid: 2 }] },
     ]);
     render(<GroupsView onOpenWorker={() => {}} onAddWorker={() => {}} />);
     expect(screen.getByText("billing")).toBeDefined();

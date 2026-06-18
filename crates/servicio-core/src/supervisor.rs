@@ -4,8 +4,8 @@ use crate::logsink::LogSink;
 use crate::process::ProcessSpawner;
 use crate::state::InstanceState;
 use crate::worker::{OverlapPolicy, RestartKind, RunMode, Schedule, WorkerSpec};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::sync::broadcast;
@@ -88,7 +88,10 @@ impl InstanceSupervisor {
     fn set_state(&self, s: InstanceState) {
         let from = *self.state_rx.borrow();
         if from != s && !from.can_transition_to(s) {
-            tracing::warn!("illegal instance transition {from:?} -> {s:?} for {}", self.spec.name);
+            tracing::warn!(
+                "illegal instance transition {from:?} -> {s:?} for {}",
+                self.spec.name
+            );
         }
         let _ = self.state_tx.send(s);
         if let Some(tx) = &self.events {
@@ -117,8 +120,13 @@ impl InstanceSupervisor {
     pub async fn run_until_terminal(&self) {
         match self.spec.run_mode.clone() {
             RunMode::Daemon { .. } => self.run_daemon().await,
-            RunMode::Scheduled { schedule, overlap } => self.run_scheduled(&schedule, overlap).await,
-            RunMode::Batch { run_count, delay_secs } => self.run_batch(run_count, delay_secs).await,
+            RunMode::Scheduled { schedule, overlap } => {
+                self.run_scheduled(&schedule, overlap).await
+            }
+            RunMode::Batch {
+                run_count,
+                delay_secs,
+            } => self.run_batch(run_count, delay_secs).await,
         }
     }
 
@@ -208,7 +216,10 @@ impl InstanceSupervisor {
         // Normally the pipes hit EOF when the child exits and the pump ends on
         // its own. Bound the join so a lingering grandchild holding the pipe
         // open cannot wedge the supervisor; then stop pumping.
-        if tokio::time::timeout(Duration::from_secs(2), &mut pump).await.is_err() {
+        if tokio::time::timeout(Duration::from_secs(2), &mut pump)
+            .await
+            .is_err()
+        {
             pump.abort();
         }
 
@@ -264,12 +275,16 @@ impl InstanceSupervisor {
     /// Run on a schedule: idle → wait for next fire → run once → repeat.
     async fn run_scheduled(&self, schedule: &Schedule, overlap: OverlapPolicy) {
         let sink = std::sync::Arc::new(std::sync::Mutex::new(
-            LogSink::new(&self.log_path, 10 * 1024 * 1024, 5).expect("log sink")));
+            LogSink::new(&self.log_path, 10 * 1024 * 1024, 5).expect("log sink"),
+        ));
         loop {
             self.set_state(InstanceState::Idle);
             let delay = match crate::schedule::next_delay(schedule, chrono::Utc::now()) {
                 Ok(d) => d,
-                Err(_) => { self.set_state(InstanceState::Failed); return; }
+                Err(_) => {
+                    self.set_state(InstanceState::Failed);
+                    return;
+                }
             };
             tokio::time::sleep(delay).await;
             // v1: Skip semantics — each run is awaited before the next is scheduled.
@@ -283,11 +298,14 @@ impl InstanceSupervisor {
     /// into a terminal Completed/Failed state.
     async fn run_batch(&self, run_count: u32, delay_secs: u64) {
         let sink = std::sync::Arc::new(std::sync::Mutex::new(
-            LogSink::new(&self.log_path, 10 * 1024 * 1024, 5).expect("log sink")));
+            LogSink::new(&self.log_path, 10 * 1024 * 1024, 5).expect("log sink"),
+        ));
         let mut any_failed = false;
         for i in 0..run_count {
             let ok = self.run_once(&sink).await;
-            if !ok { any_failed = true; }
+            if !ok {
+                any_failed = true;
+            }
             if i + 1 < run_count {
                 self.set_state(InstanceState::Idle);
                 if delay_secs > 0 {
@@ -295,7 +313,11 @@ impl InstanceSupervisor {
                 }
             }
         }
-        self.set_state(if any_failed { InstanceState::Failed } else { InstanceState::Completed });
+        self.set_state(if any_failed {
+            InstanceState::Failed
+        } else {
+            InstanceState::Completed
+        });
     }
 
     /// Does the restart policy want another run after this exit?
@@ -348,7 +370,10 @@ mod tests {
     #[tokio::test]
     async fn never_policy_runs_once_then_stops() {
         let dir = tempfile::tempdir().unwrap();
-        let policy = RestartPolicy { kind: RestartKind::Never, ..Default::default() };
+        let policy = RestartPolicy {
+            kind: RestartKind::Never,
+            ..Default::default()
+        };
         let sup = InstanceSupervisor::new(
             1,
             spec("sh", &["-c", "exit 0"], policy),
@@ -389,7 +414,10 @@ mod tests {
     async fn emits_state_events_and_tracks_terminal_state() {
         use crate::event::SupervisorEvent;
         let dir = tempfile::tempdir().unwrap();
-        let policy = RestartPolicy { kind: RestartKind::Never, ..Default::default() };
+        let policy = RestartPolicy {
+            kind: RestartKind::Never,
+            ..Default::default()
+        };
         let (tx, mut rx) = tokio::sync::broadcast::channel(64);
         let sup = InstanceSupervisor::new(
             0,
@@ -414,14 +442,26 @@ mod tests {
     async fn batch_runs_exactly_n_times_then_completed() {
         let dir = tempfile::tempdir().unwrap();
         let counter = dir.path().join("count");
-        let mut s = spec("sh", &["-c", &format!("echo x >> {}", counter.display())],
-                         RestartPolicy { kind: RestartKind::Never, ..Default::default() });
-        s.run_mode = RunMode::Batch { run_count: 3, delay_secs: 0 };
+        let mut s = spec(
+            "sh",
+            &["-c", &format!("echo x >> {}", counter.display())],
+            RestartPolicy {
+                kind: RestartKind::Never,
+                ..Default::default()
+            },
+        );
+        s.run_mode = RunMode::Batch {
+            run_count: 3,
+            delay_secs: 0,
+        };
         s.working_dir = dir.path().to_path_buf();
         let sup = InstanceSupervisor::new(0, s, Arc::new(TokioProcess), dir.path().join("b.log"));
         let mut rx = sup.subscribe();
         sup.run_until_terminal().await;
-        assert_eq!(std::fs::read_to_string(&counter).unwrap().lines().count(), 3);
+        assert_eq!(
+            std::fs::read_to_string(&counter).unwrap().lines().count(),
+            3
+        );
         assert_eq!(*rx.borrow_and_update(), InstanceState::Completed);
     }
 
@@ -429,19 +469,32 @@ mod tests {
     async fn scheduled_interval_fires_multiple_times() {
         let dir = tempfile::tempdir().unwrap();
         let counter = dir.path().join("count");
-        let mut s = spec("sh", &["-c", &format!("echo x >> {}", counter.display())],
-                         RestartPolicy { kind: RestartKind::Never, ..Default::default() });
+        let mut s = spec(
+            "sh",
+            &["-c", &format!("echo x >> {}", counter.display())],
+            RestartPolicy {
+                kind: RestartKind::Never,
+                ..Default::default()
+            },
+        );
         s.run_mode = RunMode::Scheduled {
             schedule: crate::worker::Schedule::IntervalSecs(1),
             overlap: crate::worker::OverlapPolicy::Skip,
         };
         s.working_dir = dir.path().to_path_buf();
-        let sup = std::sync::Arc::new(InstanceSupervisor::new(0, s, Arc::new(TokioProcess), dir.path().join("s.log")));
+        let sup = std::sync::Arc::new(InstanceSupervisor::new(
+            0,
+            s,
+            Arc::new(TokioProcess),
+            dir.path().join("s.log"),
+        ));
         let run = sup.clone();
         let h = tokio::spawn(async move { run.run_until_terminal().await });
         tokio::time::sleep(std::time::Duration::from_millis(2500)).await;
         h.abort();
-        let n = std::fs::read_to_string(&counter).map(|c| c.lines().count()).unwrap_or(0);
+        let n = std::fs::read_to_string(&counter)
+            .map(|c| c.lines().count())
+            .unwrap_or(0);
         assert!(n >= 2, "expected >= 2 fires, got {n}");
     }
 
@@ -449,7 +502,10 @@ mod tests {
     async fn captures_stderr_to_log() {
         let dir = tempfile::tempdir().unwrap();
         let log = dir.path().join("t.log");
-        let policy = RestartPolicy { kind: RestartKind::Never, ..Default::default() };
+        let policy = RestartPolicy {
+            kind: RestartKind::Never,
+            ..Default::default()
+        };
         let sup = InstanceSupervisor::new(
             0,
             spec("sh", &["-c", "echo oops 1>&2"], policy),
@@ -466,8 +522,18 @@ mod tests {
     async fn spawn_failure_is_logged() {
         let dir = tempfile::tempdir().unwrap();
         let log = dir.path().join("t.log");
-        let mut spec = spec("definitely-not-a-real-binary-xyz", &[], RestartPolicy { kind: RestartKind::Never, ..Default::default() });
-        spec.run_mode = RunMode::Batch { run_count: 1, delay_secs: 0 };
+        let mut spec = spec(
+            "definitely-not-a-real-binary-xyz",
+            &[],
+            RestartPolicy {
+                kind: RestartKind::Never,
+                ..Default::default()
+            },
+        );
+        spec.run_mode = RunMode::Batch {
+            run_count: 1,
+            delay_secs: 0,
+        };
         spec.working_dir = dir.path().to_path_buf();
         let sup = InstanceSupervisor::new(0, spec, Arc::new(TokioProcess), log.clone());
         sup.run_until_terminal().await;

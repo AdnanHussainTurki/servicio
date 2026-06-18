@@ -5,37 +5,68 @@ use std::path::Path;
 pub struct Laravel;
 
 impl Detector for Laravel {
-    fn name(&self) -> &str { "laravel" }
+    fn name(&self) -> &str {
+        "laravel"
+    }
     fn detect(&self, root: &Path) -> Vec<SuggestionDraft> {
-        if !root.join("artisan").exists() { return vec![]; }
+        if !root.join("artisan").exists() {
+            return vec![];
+        }
         let composer = std::fs::read_to_string(root.join("composer.json")).unwrap_or_default();
         let driver = queue_driver(root);
 
-        let mut out = vec![
-            draft(root, "Laravel scheduler", vec!["artisan".into(), "schedule:run".into()],
-                  RunMode::Scheduled { schedule: Schedule::Cron("* * * * *".into()), overlap: OverlapPolicy::Skip },
-                  vec!["laravel".into(), "scheduler".into()]),
-        ];
+        let mut out = vec![draft(
+            root,
+            "Laravel scheduler",
+            vec!["artisan".into(), "schedule:run".into()],
+            RunMode::Scheduled {
+                schedule: Schedule::Cron("* * * * *".into()),
+                overlap: OverlapPolicy::Skip,
+            },
+            vec!["laravel".into(), "scheduler".into()],
+        )];
 
         // sync runs inline; no dedicated queue worker.
         if driver != "sync" {
-            let concurrency = if driver == "redis" || driver == "sqs" { 4 } else { 2 };
-            out.insert(0, draft(
-                root,
-                &format!("Laravel queue ({driver})"),
-                vec!["artisan".into(), "queue:work".into(), driver.clone(), "--tries=3".into()],
-                RunMode::Daemon { concurrency },
-                vec!["laravel".into(), driver.clone()],
-            ));
+            let concurrency = if driver == "redis" || driver == "sqs" {
+                4
+            } else {
+                2
+            };
+            out.insert(
+                0,
+                draft(
+                    root,
+                    &format!("Laravel queue ({driver})"),
+                    vec![
+                        "artisan".into(),
+                        "queue:work".into(),
+                        driver.clone(),
+                        "--tries=3".into(),
+                    ],
+                    RunMode::Daemon { concurrency },
+                    vec!["laravel".into(), driver.clone()],
+                ),
+            );
         }
 
         if composer.contains("laravel/horizon") {
-            out.push(draft(root, "Laravel Horizon", vec!["artisan".into(), "horizon".into()],
-                           RunMode::Daemon { concurrency: 1 }, vec!["laravel".into(), "horizon".into()]));
+            out.push(draft(
+                root,
+                "Laravel Horizon",
+                vec!["artisan".into(), "horizon".into()],
+                RunMode::Daemon { concurrency: 1 },
+                vec!["laravel".into(), "horizon".into()],
+            ));
         }
         if composer.contains("laravel/reverb") {
-            out.push(draft(root, "Laravel Reverb", vec!["artisan".into(), "reverb:start".into()],
-                           RunMode::Daemon { concurrency: 1 }, vec!["laravel".into(), "reverb".into()]));
+            out.push(draft(
+                root,
+                "Laravel Reverb",
+                vec!["artisan".into(), "reverb:start".into()],
+                RunMode::Daemon { concurrency: 1 },
+                vec!["laravel".into(), "reverb".into()],
+            ));
         }
         out
     }
@@ -60,14 +91,22 @@ fn queue_driver(root: &Path) -> String {
 fn env_value(env: &str, key: &str) -> Option<String> {
     for line in env.lines() {
         let line = line.trim();
-        if line.is_empty() || line.starts_with('#') { continue; }
-        let Some((k, v)) = line.split_once('=') else { continue };
-        if k.trim() != key { continue; }
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let Some((k, v)) = line.split_once('=') else {
+            continue;
+        };
+        if k.trim() != key {
+            continue;
+        }
         let v = v.trim();
         // strip inline comment
         let v = v.split_once(" #").map(|(a, _)| a.trim()).unwrap_or(v);
         let v = v.trim_matches(|c| c == '"' || c == '\'').trim();
-        if v.is_empty() { return None; }
+        if v.is_empty() {
+            return None;
+        }
         return Some(v.to_string());
     }
     None
@@ -82,19 +121,34 @@ fn config_default(cfg: &str, key: &str) -> Option<String> {
     let comma = rest.find(',')?;
     let after = &rest[comma + 1..];
     // grab the first quoted literal
-    let start = after.find(|c| c == '\'' || c == '"')?;
+    let start = after.find(['\'', '"'])?;
     let quote = after.as_bytes()[start] as char;
     let after = &after[start + 1..];
     let end = after.find(quote)?;
     let val = after[..end].trim();
-    if val.is_empty() { None } else { Some(val.to_string()) }
+    if val.is_empty() {
+        None
+    } else {
+        Some(val.to_string())
+    }
 }
 
-fn draft(root: &Path, label: &str, args: Vec<String>, run_mode: RunMode, tags: Vec<String>) -> SuggestionDraft {
+fn draft(
+    root: &Path,
+    label: &str,
+    args: Vec<String>,
+    run_mode: RunMode,
+    tags: Vec<String>,
+) -> SuggestionDraft {
     SuggestionDraft {
         label: label.into(),
         source: "laravel/artisan".into(),
-        name: label.to_lowercase().replace([' ', '(', ')'], "-").replace("--", "-").trim_matches('-').to_string(),
+        name: label
+            .to_lowercase()
+            .replace([' ', '(', ')'], "-")
+            .replace("--", "-")
+            .trim_matches('-')
+            .to_string(),
         command: "php".into(),
         args,
         working_dir: root.to_path_buf(),
@@ -112,7 +166,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("artisan"), "#!/usr/bin/env php").unwrap();
         let s = Laravel.detect(dir.path());
-        assert!(s.iter().any(|d| matches!(d.run_mode, RunMode::Scheduled { .. })));
+        assert!(s
+            .iter()
+            .any(|d| matches!(d.run_mode, RunMode::Scheduled { .. })));
         assert!(s.iter().all(|d| d.group.is_some()));
     }
     #[test]
@@ -124,17 +180,28 @@ mod tests {
     fn horizon_detected_from_composer() {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("artisan"), "").unwrap();
-        std::fs::write(dir.path().join("composer.json"), r#"{"require":{"laravel/horizon":"^5"}}"#).unwrap();
+        std::fs::write(
+            dir.path().join("composer.json"),
+            r#"{"require":{"laravel/horizon":"^5"}}"#,
+        )
+        .unwrap();
         let s = Laravel.detect(dir.path());
         assert!(s.iter().any(|d| d.args == vec!["artisan", "horizon"]));
-        let h = s.iter().find(|d| d.args == vec!["artisan", "horizon"]).unwrap();
+        let h = s
+            .iter()
+            .find(|d| d.args == vec!["artisan", "horizon"])
+            .unwrap();
         assert!(h.tags.contains(&"horizon".to_string()));
     }
     #[test]
     fn redis_driver_from_env() {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("artisan"), "").unwrap();
-        std::fs::write(dir.path().join(".env"), "APP_ENV=local\nQUEUE_CONNECTION=redis\n").unwrap();
+        std::fs::write(
+            dir.path().join(".env"),
+            "APP_ENV=local\nQUEUE_CONNECTION=redis\n",
+        )
+        .unwrap();
         let s = Laravel.detect(dir.path());
         let q = s.iter().find(|d| d.label.contains("queue")).unwrap();
         assert!(q.args.iter().any(|a| a == "redis"));
@@ -171,8 +238,11 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("artisan"), "").unwrap();
         std::fs::create_dir_all(dir.path().join("config")).unwrap();
-        std::fs::write(dir.path().join("config/queue.php"),
-            "<?php return ['default' => env('QUEUE_CONNECTION', 'redis')];").unwrap();
+        std::fs::write(
+            dir.path().join("config/queue.php"),
+            "<?php return ['default' => env('QUEUE_CONNECTION', 'redis')];",
+        )
+        .unwrap();
         let s = Laravel.detect(dir.path());
         let q = s.iter().find(|d| d.label.contains("queue")).unwrap();
         assert!(q.args.iter().any(|a| a == "redis"));

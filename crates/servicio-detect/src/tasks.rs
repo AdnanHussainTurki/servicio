@@ -5,7 +5,9 @@ use std::path::Path;
 pub struct Tasks;
 
 impl Detector for Tasks {
-    fn name(&self) -> &str { "vscode-tasks" }
+    fn name(&self) -> &str {
+        "vscode-tasks"
+    }
     fn detect(&self, root: &Path) -> Vec<SuggestionDraft> {
         let raw = match std::fs::read_to_string(root.join(".vscode/tasks.json")) {
             Ok(s) => s,
@@ -16,15 +18,26 @@ impl Detector for Tasks {
             Ok(v) => v,
             Err(_) => return vec![],
         };
-        let Some(entries) = v.get("tasks").and_then(|t| t.as_array()) else { return vec![] };
+        let Some(entries) = v.get("tasks").and_then(|t| t.as_array()) else {
+            return vec![];
+        };
 
         let mut out = vec![];
         for entry in entries {
-            let Some(label) = entry.get("label").and_then(|l| l.as_str()) else { continue };
-            let Some(cmd) = entry.get("command").and_then(|c| c.as_str()) else { continue };
-            let args: Vec<String> = entry.get("args")
+            let Some(label) = entry.get("label").and_then(|l| l.as_str()) else {
+                continue;
+            };
+            let Some(cmd) = entry.get("command").and_then(|c| c.as_str()) else {
+                continue;
+            };
+            let args: Vec<String> = entry
+                .get("args")
                 .and_then(|a| a.as_array())
-                .map(|a| a.iter().filter_map(|x| x.as_str().map(|s| s.to_string())).collect())
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|x| x.as_str().map(|s| s.to_string()))
+                        .collect()
+                })
                 .unwrap_or_default();
 
             let (command, final_args) = if cmd.contains(['|', '&', ';', '>', '<', '$']) {
@@ -69,7 +82,9 @@ fn strip_jsonc(src: &str) -> String {
                 i += 2;
                 continue;
             }
-            if c == '"' { in_string = false; }
+            if c == '"' {
+                in_string = false;
+            }
             i += 1;
             continue;
         }
@@ -81,13 +96,17 @@ fn strip_jsonc(src: &str) -> String {
         }
         if c == '/' && i + 1 < bytes.len() && bytes[i + 1] as char == '/' {
             // line comment
-            while i < bytes.len() && bytes[i] as char != '\n' { i += 1; }
+            while i < bytes.len() && bytes[i] as char != '\n' {
+                i += 1;
+            }
             continue;
         }
         if c == '/' && i + 1 < bytes.len() && bytes[i + 1] as char == '*' {
             // block comment
             i += 2;
-            while i + 1 < bytes.len() && !(bytes[i] as char == '*' && bytes[i + 1] as char == '/') { i += 1; }
+            while i + 1 < bytes.len() && !(bytes[i] as char == '*' && bytes[i + 1] as char == '/') {
+                i += 1;
+            }
             i += 2;
             continue;
         }
@@ -112,15 +131,24 @@ fn strip_trailing_commas(src: &str) -> String {
                 i += 2;
                 continue;
             }
-            if c == '"' { in_string = false; }
+            if c == '"' {
+                in_string = false;
+            }
             i += 1;
             continue;
         }
-        if c == '"' { in_string = true; out.push(c); i += 1; continue; }
+        if c == '"' {
+            in_string = true;
+            out.push(c);
+            i += 1;
+            continue;
+        }
         if c == ',' {
             // peek ahead past whitespace
             let mut j = i + 1;
-            while j < bytes.len() && (bytes[j] as char).is_whitespace() { j += 1; }
+            while j < bytes.len() && (bytes[j] as char).is_whitespace() {
+                j += 1;
+            }
             if j < bytes.len() && (bytes[j] as char == '}' || bytes[j] as char == ']') {
                 i += 1; // drop the comma
                 continue;
@@ -140,17 +168,24 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let vs = dir.path().join(".vscode");
         std::fs::create_dir_all(&vs).unwrap();
-        std::fs::write(vs.join("tasks.json"), r#"{
+        std::fs::write(
+            vs.join("tasks.json"),
+            r#"{
   // build tasks
   "version": "2.0.0",
   "tasks": [
     { "label": "queue", "type": "shell", "command": "php", "args": ["artisan", "queue:work"], },
   ]
-}"#).unwrap();
+}"#,
+        )
+        .unwrap();
         let s = Tasks.detect(dir.path());
         assert_eq!(s.len(), 1);
         assert_eq!(s[0].command, "php");
-        assert_eq!(s[0].args, vec!["artisan".to_string(), "queue:work".to_string()]);
+        assert_eq!(
+            s[0].args,
+            vec!["artisan".to_string(), "queue:work".to_string()]
+        );
         assert!(s[0].tags.contains(&"vscode-task".to_string()));
         assert_eq!(s[0].label, "Task: queue");
     }
@@ -159,27 +194,38 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let vs = dir.path().join(".vscode");
         std::fs::create_dir_all(&vs).unwrap();
-        std::fs::write(vs.join("tasks.json"), r#"{
+        std::fs::write(
+            vs.join("tasks.json"),
+            r#"{
   "tasks": [
     { "label": "pipe", "command": "cat foo | grep bar" }
   ]
-}"#).unwrap();
+}"#,
+        )
+        .unwrap();
         let s = Tasks.detect(dir.path());
         assert_eq!(s.len(), 1);
         assert_eq!(s[0].command, "sh");
-        assert_eq!(s[0].args, vec!["-c".to_string(), "cat foo | grep bar".to_string()]);
+        assert_eq!(
+            s[0].args,
+            vec!["-c".to_string(), "cat foo | grep bar".to_string()]
+        );
     }
     #[test]
     fn skips_entries_missing_command() {
         let dir = tempfile::tempdir().unwrap();
         let vs = dir.path().join(".vscode");
         std::fs::create_dir_all(&vs).unwrap();
-        std::fs::write(vs.join("tasks.json"), r#"{
+        std::fs::write(
+            vs.join("tasks.json"),
+            r#"{
   "tasks": [
     { "label": "no-command" },
     { "label": "ok", "command": "echo" }
   ]
-}"#).unwrap();
+}"#,
+        )
+        .unwrap();
         let s = Tasks.detect(dir.path());
         assert_eq!(s.len(), 1);
         assert_eq!(s[0].command, "echo");

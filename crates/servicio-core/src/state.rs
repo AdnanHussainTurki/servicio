@@ -19,7 +19,10 @@ pub enum InstanceState {
 
 impl InstanceState {
     pub fn is_terminal(self) -> bool {
-        matches!(self, InstanceState::Stopped | InstanceState::Failed | InstanceState::Completed)
+        matches!(
+            self,
+            InstanceState::Stopped | InstanceState::Failed | InstanceState::Completed
+        )
     }
 
     pub fn can_transition_to(self, to: InstanceState) -> bool {
@@ -52,7 +55,10 @@ impl InstanceState {
         if self.can_transition_to(to) {
             Ok(to)
         } else {
-            Err(CoreError::BadTransition { from: format!("{self:?}"), to: format!("{to:?}") })
+            Err(CoreError::BadTransition {
+                from: format!("{self:?}"),
+                to: format!("{to:?}"),
+            })
         }
     }
 }
@@ -82,7 +88,9 @@ mod tests {
 
     #[test]
     fn transition_returns_error_when_illegal() {
-        let err = InstanceState::Stopped.transition_to(InstanceState::Running).unwrap_err();
+        let err = InstanceState::Stopped
+            .transition_to(InstanceState::Running)
+            .unwrap_err();
         assert!(matches!(err, CoreError::BadTransition { .. }));
     }
 

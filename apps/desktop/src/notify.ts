@@ -6,7 +6,7 @@ let permission: "granted" | "denied" | "default" | "checking" = "checking";
 async function ensurePermission(): Promise<boolean> {
   try {
     if (permission === "checking") {
-      permission = (await isPermissionGranted()) ? "granted" : (await requestPermission()) as any;
+      permission = (await isPermissionGranted()) ? "granted" : await requestPermission();
     }
     return permission === "granted";
   } catch {

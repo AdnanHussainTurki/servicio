@@ -25,7 +25,12 @@ pub struct Manager {
 impl Manager {
     pub fn new(spawner: Arc<dyn ProcessSpawner>, log_dir: PathBuf) -> Self {
         let (events, _) = broadcast::channel(1024);
-        Self { spawner, log_dir, workers: HashMap::new(), events }
+        Self {
+            spawner,
+            log_dir,
+            workers: HashMap::new(),
+            events,
+        }
     }
 
     /// Subscribe to the live event stream (state + log).
@@ -62,11 +67,21 @@ impl Manager {
             handles.push(tokio::spawn(async move { run.run_until_terminal().await }));
             supervisors.push(sup);
         }
-        self.workers.insert(spec.name.clone(), RunningWorker { spec, supervisors, handles });
+        self.workers.insert(
+            spec.name.clone(),
+            RunningWorker {
+                spec,
+                supervisors,
+                handles,
+            },
+        );
     }
 
     pub fn instance_count(&self, worker: &str) -> usize {
-        self.workers.get(worker).map(|w| w.supervisors.len()).unwrap_or(0)
+        self.workers
+            .get(worker)
+            .map(|w| w.supervisors.len())
+            .unwrap_or(0)
     }
 
     /// Snapshot of every worker's instances.
@@ -135,7 +150,10 @@ mod tests {
             working_dir: PathBuf::from("/"),
             env: BTreeMap::new(),
             run_mode: RunMode::Daemon { concurrency: 2 },
-            restart: RestartPolicy { kind: RestartKind::Always, ..Default::default() },
+            restart: RestartPolicy {
+                kind: RestartKind::Always,
+                ..Default::default()
+            },
             autostart: true,
             enabled: true,
             group: None,
@@ -158,7 +176,10 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let mut mgr = Manager::new(Arc::new(TokioProcess), dir.path().to_path_buf());
         let mut s = long_running("b");
-        s.run_mode = RunMode::Batch { run_count: 2, delay_secs: 0 };
+        s.run_mode = RunMode::Batch {
+            run_count: 2,
+            delay_secs: 0,
+        };
         s.command = "sh".into();
         s.args = vec!["-c".into(), "true".into()];
         mgr.start_worker(s).await;
@@ -204,8 +225,19 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let mgr = Manager::new(Arc::new(TokioProcess), dir.path().to_path_buf());
         let mut rx = mgr.subscribe();
-        mgr.events_sender().send(SupervisorEvent::Metric { worker: "q".into(), instance: 0, ts: 1, cpu: 1.0, mem: 1 }).unwrap();
-        assert!(matches!(rx.recv().await.unwrap(), SupervisorEvent::Metric { .. }));
+        mgr.events_sender()
+            .send(SupervisorEvent::Metric {
+                worker: "q".into(),
+                instance: 0,
+                ts: 1,
+                cpu: 1.0,
+                mem: 1,
+            })
+            .unwrap();
+        assert!(matches!(
+            rx.recv().await.unwrap(),
+            SupervisorEvent::Metric { .. }
+        ));
     }
 
     #[tokio::test]

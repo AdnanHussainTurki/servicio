@@ -14,7 +14,7 @@ export type RunMode = RunModeDaemon;
 export interface WorkerStatus {
   name: string;
   display_name?: string | null;
-  run_mode: RunMode;
+  run_mode: RunModeAny;
   instances: InstanceStatus[];
   group?: string | null;
   tags?: string[];

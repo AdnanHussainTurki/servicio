@@ -2,7 +2,10 @@ use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
 #[derive(Parser)]
-#[command(name = "servicio-daemon", about = "Servicio supervisor (phase 1 test CLI)")]
+#[command(
+    name = "servicio-daemon",
+    about = "Servicio supervisor (phase 1 test CLI)"
+)]
 pub struct Cli {
     /// Path to the SQLite database.
     #[arg(long, default_value = "servicio.db")]

@@ -1,7 +1,7 @@
 use servicio_cli_lib::Client;
+use servicio_core::worker::{RestartPolicy, RunMode, WorkerSpec};
 use servicio_daemon_lib::paths::Paths;
 use servicio_daemon_lib::serve::serve;
-use servicio_core::worker::{RestartPolicy, RunMode, WorkerSpec};
 use std::collections::BTreeMap;
 use std::time::Duration;
 

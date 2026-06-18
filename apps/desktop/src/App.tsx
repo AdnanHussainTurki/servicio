@@ -20,15 +20,12 @@ export default function App() {
   // When an edit is requested, fetch the full spec from the daemon. Guarded so a
   // failed fetch (or dev browser without Tauri) never crashes the app.
   useEffect(() => {
-    if (!editing) {
-      setEditSpec(null);
-      return;
-    }
+    if (!editing) return;
     let alive = true;
     (async () => {
       try {
         const spec = await api.getWorker(editing);
-        if (alive) setEditSpec(spec as EditSpec);
+        if (alive) setEditSpec(spec);
       } catch (err) {
         if (alive) {
           useStore.getState().setError(`Could not load "${editing}" for editing: ${String(err)}`);
@@ -36,7 +33,12 @@ export default function App() {
         }
       }
     })();
-    return () => { alive = false; };
+    // Clearing the stale spec on the way out (when `editing` changes or unmounts)
+    // keeps it out of the synchronous effect body.
+    return () => {
+      alive = false;
+      setEditSpec(null);
+    };
   }, [editing]);
 
   function closeFlow() {

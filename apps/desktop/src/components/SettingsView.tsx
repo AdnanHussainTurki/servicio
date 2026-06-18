@@ -61,9 +61,13 @@ export function SettingsView() {
   };
 
   useEffect(() => {
-    void refresh();
-    void refreshDiagnostics();
-    void refreshLog();
+    // Fetch once on mount, then poll. setState only ever runs after an `await`
+    // inside these helpers, so it's a microtask, not a synchronous cascade.
+    void (async () => {
+      await refresh();
+      await refreshDiagnostics();
+      await refreshLog();
+    })();
     const id = setInterval(() => {
       void refreshLog();
       void refreshDiagnostics();

@@ -1,6 +1,7 @@
 import type { WorkerStatus } from "../types";
 import { worstState, styleFor } from "./status";
 import { StatusDot } from "./StatusDot";
+import { runModeLabel, runModeMetric } from "./runMode";
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
@@ -36,6 +37,7 @@ export function WorkerCard({
   const running = w.instances.filter((i) => i.state === "running").length;
   const title = w.display_name?.trim() || w.name;
   const showId = title !== w.name;
+  const modeMetric = runModeMetric(w.run_mode);
   const tags = w.tags ?? [];
   const TAG_CAP = 4;
   const shownTags = tags.slice(0, TAG_CAP);
@@ -69,7 +71,7 @@ export function WorkerCard({
               </p>
             )}
             <p className="mt-0.5 font-mono text-[11px] text-stone-400 dark:text-stone-500">
-              daemon · ×{w.run_mode.concurrency}
+              {runModeLabel(w.run_mode)}
             </p>
           </div>
           <span
@@ -82,7 +84,7 @@ export function WorkerCard({
         <div className="mt-4 grid grid-cols-3 gap-2 border-t border-stone-100 pt-3 dark:border-white/[0.05]">
           <Metric label="up" value={`${running}/${w.instances.length}`} />
           <Metric label="restarts" value={String(restarts)} />
-          <Metric label="conc" value={`×${w.run_mode.concurrency}`} />
+          <Metric label={modeMetric.label} value={modeMetric.value} />
         </div>
 
         {tags.length > 0 && (

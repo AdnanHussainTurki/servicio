@@ -1,9 +1,9 @@
 //! Thin async client for the servicio daemon.
 
 use anyhow::{anyhow, Result};
+use serde_json::{json, Value};
 use servicio_ipc::types::WorkerStatus;
 use servicio_ipc::Frame;
-use serde_json::{json, Value};
 use std::path::Path;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, Lines};
 use tokio::net::unix::{OwnedReadHalf, OwnedWriteHalf};
@@ -21,7 +21,11 @@ impl Client {
         let stream = UnixStream::connect(socket).await?;
         let (rd, wr) = stream.into_split();
         let lines = BufReader::new(rd).lines();
-        let mut c = Client { wr, lines, next_id: 1 };
+        let mut c = Client {
+            wr,
+            lines,
+            next_id: 1,
+        };
         let _ = c.request("hello", json!({ "token": token })).await?;
         Ok(c)
     }
@@ -30,8 +34,14 @@ impl Client {
     pub async fn request(&mut self, method: &str, params: Value) -> Result<Value> {
         let id = self.next_id;
         self.next_id += 1;
-        let frame = Frame::Request { id, method: method.into(), params };
-        self.wr.write_all(format!("{}\n", frame.to_line()).as_bytes()).await?;
+        let frame = Frame::Request {
+            id,
+            method: method.into(),
+            params,
+        };
+        self.wr
+            .write_all(format!("{}\n", frame.to_line()).as_bytes())
+            .await?;
         loop {
             let line = self
                 .lines
@@ -39,7 +49,11 @@ impl Client {
                 .await?
                 .ok_or_else(|| anyhow!("connection closed"))?;
             match Frame::from_line(&line)? {
-                Frame::Response { id: rid, result, error } if rid == id => {
+                Frame::Response {
+                    id: rid,
+                    result,
+                    error,
+                } if rid == id => {
                     if let Some(e) = error {
                         return Err(anyhow!("{}: {}", e.code, e.message));
                     }
@@ -55,7 +69,9 @@ impl Client {
     }
 
     pub async fn add_worker(&mut self, spec: &servicio_core::worker::WorkerSpec) -> Result<()> {
-        self.request("add_worker", json!({ "spec": spec })).await.map(|_| ())
+        self.request("add_worker", json!({ "spec": spec }))
+            .await
+            .map(|_| ())
     }
 
     pub async fn list_workers(&mut self) -> Result<Vec<WorkerStatus>> {
@@ -64,22 +80,40 @@ impl Client {
     }
 
     pub async fn start_worker(&mut self, name: &str) -> Result<()> {
-        self.request("start_worker", json!({ "name": name })).await.map(|_| ())
+        self.request("start_worker", json!({ "name": name }))
+            .await
+            .map(|_| ())
     }
 
     pub async fn stop_worker(&mut self, name: &str) -> Result<()> {
-        self.request("stop_worker", json!({ "name": name })).await.map(|_| ())
+        self.request("stop_worker", json!({ "name": name }))
+            .await
+            .map(|_| ())
     }
 
-    pub async fn export_workers(&mut self) -> Result<serde_json::Value> { self.request("export_workers", json!({})).await }
+    pub async fn export_workers(&mut self) -> Result<serde_json::Value> {
+        self.request("export_workers", json!({})).await
+    }
 
-    pub async fn import_workers(&mut self, workers: serde_json::Value) -> Result<serde_json::Value> { self.request("import_workers", json!({"workers": workers})).await }
+    pub async fn import_workers(
+        &mut self,
+        workers: serde_json::Value,
+    ) -> Result<serde_json::Value> {
+        self.request("import_workers", json!({"workers": workers}))
+            .await
+    }
 
-    pub async fn remove_worker(&mut self, name: &str) -> Result<serde_json::Value> { self.request("remove_worker", json!({"name": name})).await }
+    pub async fn remove_worker(&mut self, name: &str) -> Result<serde_json::Value> {
+        self.request("remove_worker", json!({"name": name})).await
+    }
 
-    pub async fn start_group(&mut self, group: &str) -> Result<serde_json::Value> { self.request("start_group", json!({"group": group})).await }
+    pub async fn start_group(&mut self, group: &str) -> Result<serde_json::Value> {
+        self.request("start_group", json!({"group": group})).await
+    }
 
-    pub async fn stop_group(&mut self, group: &str) -> Result<serde_json::Value> { self.request("stop_group", json!({"group": group})).await }
+    pub async fn stop_group(&mut self, group: &str) -> Result<serde_json::Value> {
+        self.request("stop_group", json!({"group": group})).await
+    }
 
     pub async fn get_worker(&mut self, name: &str) -> Result<serde_json::Value> {
         self.request("get_worker", json!({"name": name})).await
@@ -94,11 +128,16 @@ impl Client {
     }
 
     pub async fn metrics(&mut self, worker: &str, since_secs: u64) -> Result<serde_json::Value> {
-        self.request("metrics", json!({ "worker": worker, "since_secs": since_secs })).await
+        self.request(
+            "metrics",
+            json!({ "worker": worker, "since_secs": since_secs }),
+        )
+        .await
     }
 
     pub async fn detect(&mut self, path: &str) -> Result<serde_json::Value> {
-        self.request("detect_workers", json!({ "path": path })).await
+        self.request("detect_workers", json!({ "path": path }))
+            .await
     }
 
     pub async fn daemon_log(&mut self, lines: u64) -> Result<serde_json::Value> {
@@ -113,12 +152,24 @@ impl Client {
     ) -> Result<Lines<BufReader<OwnedReadHalf>>> {
         let id = self.next_id;
         let params = json!({ "topics": topics, "worker": worker });
-        let frame = Frame::Request { id, method: "subscribe".into(), params };
-        self.wr.write_all(format!("{}\n", frame.to_line()).as_bytes()).await?;
+        let frame = Frame::Request {
+            id,
+            method: "subscribe".into(),
+            params,
+        };
+        self.wr
+            .write_all(format!("{}\n", frame.to_line()).as_bytes())
+            .await?;
         loop {
-            let line = self.lines.next_line().await?.ok_or_else(|| anyhow!("closed"))?;
+            let line = self
+                .lines
+                .next_line()
+                .await?
+                .ok_or_else(|| anyhow!("closed"))?;
             if let Frame::Response { id: rid, .. } = Frame::from_line(&line)? {
-                if rid == id { break; }
+                if rid == id {
+                    break;
+                }
             }
         }
         Ok(self.lines)

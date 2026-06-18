@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { useStore } from "../store";
-import { DashboardGraphs, computeTotals } from "./DashboardGraphs";
+import { DashboardGraphs } from "./DashboardGraphs";
+import { computeTotals } from "../dashboardTotals";
 import type { WorkerStatus } from "../types";
 
 const MB = 1048576;

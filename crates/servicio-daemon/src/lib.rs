@@ -16,7 +16,11 @@ use std::path::Path;
 /// Build the ServiceSpec for the current daemon exe + base dir.
 pub fn service_spec(base: std::path::PathBuf) -> std::io::Result<ServiceSpec> {
     let exe = std::env::current_exe()?;
-    Ok(ServiceSpec { label: "com.servicio.daemon".into(), exe, base })
+    Ok(ServiceSpec {
+        label: "com.servicio.daemon".into(),
+        exe,
+        base,
+    })
 }
 
 /// Add (or replace) a worker definition in the database.

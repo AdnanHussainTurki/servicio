@@ -4,11 +4,39 @@ import { LogView } from "./LogView";
 import { MetricsTab } from "./MetricsTab";
 import { StatusDot } from "./StatusDot";
 import { worstState, styleFor } from "./status";
+import { runModeMetric } from "./runMode";
 import { useState } from "react";
+
+type Tab = "logs" | "metrics" | "config";
+
+function TabBtn({
+  id,
+  label,
+  active,
+  onSelect,
+}: {
+  id: Tab;
+  label: string;
+  active: Tab;
+  onSelect: (id: Tab) => void;
+}) {
+  return (
+    <button
+      onClick={() => onSelect(id)}
+      className={`-mb-px border-b-2 px-1 pb-2.5 text-sm font-medium transition ${
+        active === id
+          ? "border-signal-500 text-stone-900 dark:text-stone-50"
+          : "border-transparent text-stone-400 hover:text-stone-600 dark:hover:text-stone-300"
+      }`}
+    >
+      {label}
+    </button>
+  );
+}
 
 export function WorkerDetail({ name, onBack, onEdit, onDelete }: { name: string; onBack: () => void; onEdit?: () => void; onDelete?: () => void }) {
   const w = useStore((s) => s.workers[name]);
-  const [tab, setTab] = useState<"logs" | "metrics" | "config">("logs");
+  const [tab, setTab] = useState<Tab>("logs");
 
   if (!w)
     return (
@@ -24,19 +52,7 @@ export function WorkerDetail({ name, onBack, onEdit, onDelete }: { name: string;
   const s = styleFor(state);
   const restarts = w.instances.reduce((n, i) => n + i.restart_count, 0);
   const running = w.instances.filter((i) => i.state === "running").length;
-
-  const TabBtn = ({ id, label }: { id: "logs" | "metrics" | "config"; label: string }) => (
-    <button
-      onClick={() => setTab(id)}
-      className={`-mb-px border-b-2 px-1 pb-2.5 text-sm font-medium transition ${
-        tab === id
-          ? "border-signal-500 text-stone-900 dark:text-stone-50"
-          : "border-transparent text-stone-400 hover:text-stone-600 dark:hover:text-stone-300"
-      }`}
-    >
-      {label}
-    </button>
-  );
+  const modeMetric = runModeMetric(w.run_mode);
 
   return (
     <div className="mx-auto max-w-5xl p-6">
@@ -105,7 +121,7 @@ export function WorkerDetail({ name, onBack, onEdit, onDelete }: { name: string;
           {[
             ["instances up", `${running}/${w.instances.length}`],
             ["restarts", String(restarts)],
-            ["concurrency", `×${w.run_mode.concurrency}`],
+            [modeMetric.label, modeMetric.value],
             ["mode", w.run_mode.type],
           ].map(([label, value]) => (
             <div key={label} className="pl-2">
@@ -122,9 +138,9 @@ export function WorkerDetail({ name, onBack, onEdit, onDelete }: { name: string;
 
       {/* tabs */}
       <div className="mb-4 mt-6 flex gap-6 border-b border-stone-200/70 dark:border-white/[0.06]">
-        <TabBtn id="logs" label="Logs" />
-        <TabBtn id="metrics" label="Metrics" />
-        <TabBtn id="config" label="Config" />
+        <TabBtn id="logs" label="Logs" active={tab} onSelect={setTab} />
+        <TabBtn id="metrics" label="Metrics" active={tab} onSelect={setTab} />
+        <TabBtn id="config" label="Config" active={tab} onSelect={setTab} />
       </div>
 
       {tab === "logs" && <LogView worker={name} />}

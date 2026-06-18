@@ -2,6 +2,11 @@ use rusqlite::Connection;
 use servicio_core::worker::WorkerSpec;
 use std::path::Path;
 
+/// A single metric sample: (timestamp, cpu, mem).
+pub type MetricRow = (u64, f32, u64);
+/// Metric samples for one instance: (instance, points).
+pub type InstanceSeries = (u32, Vec<MetricRow>);
+
 /// SQLite persistence for worker definitions. Source of truth for the daemon.
 pub struct Db {
     conn: Connection,
@@ -53,7 +58,14 @@ impl Db {
         )
     }
 
-    pub fn insert_metric(&self, worker: &str, instance: u32, ts: u64, cpu: f32, mem: u64) -> rusqlite::Result<()> {
+    pub fn insert_metric(
+        &self,
+        worker: &str,
+        instance: u32,
+        ts: u64,
+        cpu: f32,
+        mem: u64,
+    ) -> rusqlite::Result<()> {
         self.conn.execute(
             "INSERT INTO metrics (worker, instance, ts, cpu, mem) VALUES (?1,?2,?3,?4,?5)",
             rusqlite::params![worker, instance, ts as i64, cpu as f64, mem as i64],
@@ -62,13 +74,22 @@ impl Db {
     }
 
     /// Returns (instance, points) grouped, points = (ts,cpu,mem), for ts >= since.
-    pub fn query_metrics(&self, worker: &str, since: u64) -> rusqlite::Result<Vec<(u32, Vec<(u64, f32, u64)>)>> {
+    pub fn query_metrics(
+        &self,
+        worker: &str,
+        since: u64,
+    ) -> rusqlite::Result<Vec<InstanceSeries>> {
         let mut stmt = self.conn.prepare(
             "SELECT instance, ts, cpu, mem FROM metrics WHERE worker=?1 AND ts>=?2 ORDER BY instance, ts")?;
         let rows = stmt.query_map(rusqlite::params![worker, since as i64], |r| {
-            Ok((r.get::<_, i64>(0)? as u32, r.get::<_, i64>(1)? as u64, r.get::<_, f64>(2)? as f32, r.get::<_, i64>(3)? as u64))
+            Ok((
+                r.get::<_, i64>(0)? as u32,
+                r.get::<_, i64>(1)? as u64,
+                r.get::<_, f64>(2)? as f32,
+                r.get::<_, i64>(3)? as u64,
+            ))
         })?;
-        let mut out: Vec<(u32, Vec<(u64, f32, u64)>)> = Vec::new();
+        let mut out: Vec<InstanceSeries> = Vec::new();
         for row in rows {
             let (inst, ts, cpu, mem) = row?;
             match out.last_mut() {
@@ -80,7 +101,8 @@ impl Db {
     }
 
     pub fn prune_metrics(&self, older_than_ts: u64) -> rusqlite::Result<()> {
-        self.conn.execute("DELETE FROM metrics WHERE ts < ?1", [older_than_ts as i64])?;
+        self.conn
+            .execute("DELETE FROM metrics WHERE ts < ?1", [older_than_ts as i64])?;
         Ok(())
     }
 
@@ -106,12 +128,16 @@ impl Db {
 
     /// Workers that should be (re)started automatically by the daemon.
     pub fn autostart_workers(&self) -> rusqlite::Result<Vec<WorkerSpec>> {
-        self.query("SELECT spec_json FROM workers WHERE autostart = 1 AND enabled = 1 ORDER BY name")
+        self.query(
+            "SELECT spec_json FROM workers WHERE autostart = 1 AND enabled = 1 ORDER BY name",
+        )
     }
 
     /// Fetch one worker by name.
     pub fn get_worker(&self, name: &str) -> rusqlite::Result<Option<WorkerSpec>> {
-        let mut stmt = self.conn.prepare("SELECT spec_json FROM workers WHERE name = ?1")?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT spec_json FROM workers WHERE name = ?1")?;
         let mut rows = stmt.query_map([name], |row| {
             let json: String = row.get(0)?;
             Ok(serde_json::from_str::<WorkerSpec>(&json).expect("stored spec parses"))
@@ -124,7 +150,9 @@ impl Db {
 
     /// Delete a worker by name; returns true if a row was removed.
     pub fn remove_worker(&self, name: &str) -> rusqlite::Result<bool> {
-        let n = self.conn.execute("DELETE FROM workers WHERE name = ?1", [name])?;
+        let n = self
+            .conn
+            .execute("DELETE FROM workers WHERE name = ?1", [name])?;
         Ok(n > 0)
     }
 
@@ -200,7 +228,12 @@ mod tests {
         let mut no = spec("no");
         no.autostart = false;
         db.upsert_worker(&no).unwrap();
-        let names: Vec<_> = db.autostart_workers().unwrap().into_iter().map(|w| w.name).collect();
+        let names: Vec<_> = db
+            .autostart_workers()
+            .unwrap()
+            .into_iter()
+            .map(|w| w.name)
+            .collect();
         assert_eq!(names, vec!["yes".to_string()]);
     }
 
