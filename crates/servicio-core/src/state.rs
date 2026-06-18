@@ -44,6 +44,7 @@ impl InstanceState {
                 | (Idle, Stopped)
                 | (Running, Completed)
                 | (Starting, Completed)
+                | (Stopped, Idle)
         )
     }
 
@@ -96,6 +97,11 @@ mod tests {
     fn scheduled_idle_run_cycle_is_legal() {
         assert!(InstanceState::Running.can_transition_to(InstanceState::Idle));
         assert!(InstanceState::Idle.can_transition_to(InstanceState::Starting));
+    }
+
+    #[test]
+    fn scheduled_first_idle_from_stopped_is_legal() {
+        assert!(InstanceState::Stopped.can_transition_to(InstanceState::Idle));
     }
 
     #[test]

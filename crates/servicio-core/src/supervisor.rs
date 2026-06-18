@@ -277,8 +277,11 @@ impl InstanceSupervisor {
         for i in 0..run_count {
             let ok = self.run_once(&sink).await;
             if !ok { any_failed = true; }
-            if i + 1 < run_count && delay_secs > 0 {
-                tokio::time::sleep(Duration::from_secs(delay_secs)).await;
+            if i + 1 < run_count {
+                self.set_state(InstanceState::Idle);
+                if delay_secs > 0 {
+                    tokio::time::sleep(Duration::from_secs(delay_secs)).await;
+                }
             }
         }
         self.set_state(if any_failed { InstanceState::Failed } else { InstanceState::Completed });
