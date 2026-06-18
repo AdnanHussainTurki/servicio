@@ -4,6 +4,7 @@ import { LogView } from "./LogView";
 import { MetricsTab } from "./MetricsTab";
 import { StatusDot } from "./StatusDot";
 import { worstState, styleFor } from "./status";
+import { runModeMetric } from "./runMode";
 import { useState } from "react";
 
 type Tab = "logs" | "metrics" | "config";
@@ -51,6 +52,7 @@ export function WorkerDetail({ name, onBack, onEdit, onDelete }: { name: string;
   const s = styleFor(state);
   const restarts = w.instances.reduce((n, i) => n + i.restart_count, 0);
   const running = w.instances.filter((i) => i.state === "running").length;
+  const modeMetric = runModeMetric(w.run_mode);
 
   return (
     <div className="mx-auto max-w-5xl p-6">
@@ -119,7 +121,7 @@ export function WorkerDetail({ name, onBack, onEdit, onDelete }: { name: string;
           {[
             ["instances up", `${running}/${w.instances.length}`],
             ["restarts", String(restarts)],
-            ["concurrency", `×${w.run_mode.concurrency}`],
+            [modeMetric.label, modeMetric.value],
             ["mode", w.run_mode.type],
           ].map(([label, value]) => (
             <div key={label} className="pl-2">
