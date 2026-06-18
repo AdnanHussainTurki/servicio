@@ -2,5 +2,73 @@
 @tailwind components;
 @tailwind utilities;
 
-:root { color-scheme: light dark; }
-body { @apply bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100; }
+:root {
+  color-scheme: light dark;
+}
+
+@layer base {
+  html {
+    font-family: theme("fontFamily.display");
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    @apply bg-stone-100 text-stone-900 dark:bg-[#0b0d10] dark:text-stone-200;
+    /* faint blueprint grid in the content void */
+    background-image:
+      linear-gradient(to right, rgba(120, 113, 108, 0.06) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(120, 113, 108, 0.06) 1px, transparent 1px);
+    background-size: 34px 34px;
+  }
+
+  .dark body {
+    background-image:
+      linear-gradient(to right, rgba(148, 163, 184, 0.045) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(148, 163, 184, 0.045) 1px, transparent 1px);
+  }
+
+  /* tighter, more architectural numerals for metrics */
+  .tnum {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
+  }
+}
+
+@layer components {
+  /* slim, unobtrusive scrollbars matching the console aesthetic */
+  .scroll-thin {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(120, 113, 108, 0.4) transparent;
+  }
+  .scroll-thin::-webkit-scrollbar {
+    width: 9px;
+    height: 9px;
+  }
+  .scroll-thin::-webkit-scrollbar-thumb {
+    background-color: rgba(120, 113, 108, 0.35);
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  .scroll-thin::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(120, 113, 108, 0.55);
+  }
+
+  /* primary action button — copper, tactile */
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-md bg-signal-500
+      px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition
+      hover:bg-signal-600 active:translate-y-px focus:outline-none focus-visible:ring-2
+      focus-visible:ring-signal-400 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent;
+  }
+
+  /* ghost / secondary action */
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-md border
+      border-stone-300 bg-white/60 px-3 py-2 text-sm font-medium text-stone-700
+      transition hover:bg-white hover:border-stone-400
+      dark:border-white/10 dark:bg-white/[0.03] dark:text-stone-300
+      dark:hover:bg-white/[0.07] dark:hover:border-white/20;
+  }
+}
