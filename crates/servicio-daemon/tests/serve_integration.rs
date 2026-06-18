@@ -411,7 +411,7 @@ async fn metrics_method_returns_series_for_running_worker() {
             let arr = v.as_array().unwrap();
             assert!(!arr.is_empty(), "expected >=1 instance series");
             assert!(
-                arr[0]["points"].as_array().unwrap().len() >= 1,
+                !arr[0]["points"].as_array().unwrap().is_empty(),
                 "expected >=1 sample point"
             );
         }
