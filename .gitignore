@@ -9,3 +9,6 @@ apps/desktop/src-tauri/binaries/
 
 # release artifacts
 /dist/
+.DS_Store
+.playwright-mcp/
+/*.png
