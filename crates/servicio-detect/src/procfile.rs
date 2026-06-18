@@ -1,4 +1,4 @@
-use crate::{Detector, SuggestionDraft};
+use crate::{folder_group, Detector, SuggestionDraft};
 use servicio_core::worker::RunMode;
 use std::path::Path;
 
@@ -23,6 +23,7 @@ impl Detector for Procfile {
                 label: format!("Procfile: {}", name.trim()), source: "Procfile".into(),
                 name: name.trim().to_string(), command: command.to_string(), args,
                 working_dir: root.to_path_buf(), run_mode: RunMode::Daemon { concurrency: 1 },
+                group: folder_group(root), tags: vec!["procfile".into()],
             });
         }
         out
