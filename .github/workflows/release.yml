@@ -1,18 +1,32 @@
 name: Release
 
 # Build + publish desktop apps for macOS (universal), Linux, and Windows on a
-# version tag (or manual dispatch). Each job appends its artifacts to the same
-# GitHub Release for the tag.
+# version tag (or manual dispatch). Each job uses tauri-action, which:
+#   - builds the app (running beforeBuildCommand → the frontend build),
+#   - signs the updater artifacts with the minisign key (env vars below),
+#   - creates/updates the GitHub Release for the tag, and
+#   - writes/merges latest.json (the manifest the in-app updater fetches).
+#
+# The in-app updater endpoint points at:
+#   https://github.com/AdnanHussainTurki/servicio/releases/latest/download/latest.json
+#
+# Required repository secrets (Settings → Secrets and variables → Actions):
+#   TAURI_SIGNING_PRIVATE_KEY           contents of .secrets/servicio-updater.key
+#   TAURI_SIGNING_PRIVATE_KEY_PASSWORD  the key's password ("" if none)
+# Without these the build fails at the updater-signing step.
 on:
   push:
     tags:
       - "v*.*.*"
   workflow_dispatch:
 
-# The release job needs write access to create/update the GitHub Release.
+# tauri-action needs write access to create/update the GitHub Release.
 permissions:
   contents: write
 
+# Enable updater artifacts for CI builds only, via the merged config file
+# src-tauri/tauri.updater-ci.conf.json passed with `--config`. This keeps local
+# `npm run tauri build` working without the signing key.
 jobs:
   macos-universal:
     name: macOS universal build
@@ -40,32 +54,25 @@ jobs:
         working-directory: apps/desktop
         run: npm ci
 
-      # Builds the universal sidecar (prepare-sidecar:universal) then
-      # `tauri build --target universal-apple-darwin`. The PATH prefix forces
-      # the rustup toolchain (Homebrew rust lacks cross-arch std).
-      #
-      # NOTE: this produces an UNSIGNED build (no Apple Developer cert). The
-      # resulting .dmg/.app run locally after a right-click -> Open (or
-      # `xattr -dr com.apple.quarantine <app>`). To ship a signed + notarized
-      # build, add the APPLE_* signing env vars as repository secrets and export
-      # them in this step — see docs/RELEASING.md for the full list and steps.
-      - name: Build universal app
+      # Stage the per-arch + lipo'd universal daemon sidecars before bundling.
+      - name: Prepare universal sidecar
         working-directory: apps/desktop
-        run: PATH="$HOME/.cargo/bin:$PATH" npm run build:universal
+        run: npm run prepare-sidecar:universal
 
-      # Zip the .app for upload (a raw .app directory can't be a release asset).
-      - name: Zip .app bundle
-        working-directory: apps/desktop/src-tauri/target/universal-apple-darwin/release/bundle/macos
-        run: zip -ry Servicio-macos.app.zip *.app
-
-      - name: Publish GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
+      - name: Build, sign, and publish
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          generate_release_notes: true
-          files: |
-            apps/desktop/src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
-            apps/desktop/src-tauri/target/universal-apple-darwin/release/bundle/macos/Servicio-macos.app.zip
+          projectPath: apps/desktop
+          tagName: ${{ github.ref_name }}
+          releaseName: "Servicio ${{ github.ref_name }}"
+          releaseDraft: false
+          prerelease: false
+          includeUpdaterJson: true
+          args: --target universal-apple-darwin --config src-tauri/tauri.updater-ci.conf.json
 
   linux:
     name: Linux build
@@ -106,21 +113,24 @@ jobs:
         working-directory: apps/desktop
         run: npm ci
 
-      # Stage the host (x86_64-unknown-linux-gnu) daemon sidecar, then bundle.
-      - name: Build app
+      - name: Prepare sidecar
         working-directory: apps/desktop
-        run: |
-          npm run prepare-sidecar
-          npm run tauri build
+        run: npm run prepare-sidecar
 
-      - name: Publish GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
+      - name: Build, sign, and publish
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          files: |
-            apps/desktop/src-tauri/target/release/bundle/deb/*.deb
-            apps/desktop/src-tauri/target/release/bundle/rpm/*.rpm
-            apps/desktop/src-tauri/target/release/bundle/appimage/*.AppImage
+          projectPath: apps/desktop
+          tagName: ${{ github.ref_name }}
+          releaseName: "Servicio ${{ github.ref_name }}"
+          releaseDraft: false
+          prerelease: false
+          includeUpdaterJson: true
+          args: --config src-tauri/tauri.updater-ci.conf.json
 
   windows:
     name: Windows build
@@ -144,19 +154,23 @@ jobs:
         working-directory: apps/desktop
         run: npm ci
 
-      # prepare-sidecar.sh is bash; run it via Git Bash (default shell on
-      # windows-latest runners). Stages the host daemon, then bundles .msi/.exe.
-      - name: Build app
+      # prepare-sidecar.sh is bash; run it via Git Bash (default on the runner).
+      - name: Prepare sidecar
         working-directory: apps/desktop
         shell: bash
-        run: |
-          npm run prepare-sidecar
-          npm run tauri build
+        run: npm run prepare-sidecar
 
-      - name: Publish GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
+      - name: Build, sign, and publish
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          files: |
-            apps/desktop/src-tauri/target/release/bundle/msi/*.msi
-            apps/desktop/src-tauri/target/release/bundle/nsis/*.exe
+          projectPath: apps/desktop
+          tagName: ${{ github.ref_name }}
+          releaseName: "Servicio ${{ github.ref_name }}"
+          releaseDraft: false
+          prerelease: false
+          includeUpdaterJson: true
+          args: --config src-tauri/tauri.updater-ci.conf.json
