@@ -79,6 +79,10 @@ impl Client {
         self.request("metrics", json!({ "worker": worker, "since_secs": since_secs })).await
     }
 
+    pub async fn detect(&mut self, path: &str) -> Result<serde_json::Value> {
+        self.request("detect_workers", json!({ "path": path })).await
+    }
+
     /// Send a subscribe request, consume the ack, then yield raw event lines.
     pub async fn subscribe(
         mut self,

@@ -1,0 +1,13 @@
+[package]
+name = "servicio-detect"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+servicio-core = { path = "../servicio-core" }
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

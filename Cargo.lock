@@ -695,12 +695,23 @@ dependencies = [
  "serde",
  "serde_json",
  "servicio-core",
+ "servicio-detect",
  "servicio-ipc",
  "sysinfo",
  "tempfile",
  "thiserror",
  "tokio",
  "tracing",
+]
+
+[[package]]
+name = "servicio-detect"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "servicio-core",
+ "tempfile",
 ]
 
 [[package]]

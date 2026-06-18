@@ -28,6 +28,8 @@ enum Command {
     Logs { name: String },
     /// Show recent metrics (cpu/mem) for a worker.
     Metrics { name: String },
+    /// Scan a folder and suggest workers (autodetect).
+    Detect { path: String },
 }
 
 fn base_dir(arg: Option<PathBuf>) -> PathBuf {
@@ -76,6 +78,10 @@ async fn main() -> Result<()> {
         }
         Command::Metrics { name } => {
             let v = client.metrics(&name, 900).await?;
+            println!("{}", serde_json::to_string_pretty(&v)?);
+        }
+        Command::Detect { path } => {
+            let v = client.detect(&path).await?;
             println!("{}", serde_json::to_string_pretty(&v)?);
         }
         Command::Logs { name } => {
