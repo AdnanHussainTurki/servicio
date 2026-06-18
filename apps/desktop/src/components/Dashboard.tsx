@@ -1,5 +1,5 @@
 import { useStore } from "../store";
-import { api } from "../api";
+import { api, withError } from "../api";
 import { WorkerCard } from "./WorkerCard";
 
 export function Dashboard({ onOpen, onAdd }: { onOpen: (name: string) => void; onAdd: () => void }) {
@@ -19,8 +19,8 @@ export function Dashboard({ onOpen, onAdd }: { onOpen: (name: string) => void; o
         {workers.map((w) => (
           <WorkerCard key={w.name} w={w}
             onOpen={() => onOpen(w.name)}
-            onStart={() => api.startWorker(w.name)}
-            onStop={() => api.stopWorker(w.name)} />
+            onStart={() => withError(api.startWorker(w.name))}
+            onStop={() => withError(api.stopWorker(w.name))} />
         ))}
       </div>
     </div>

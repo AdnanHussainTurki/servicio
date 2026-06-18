@@ -44,11 +44,21 @@ fn main() {
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 let base = default_base();
-                let token = match ensure_daemon(&base, "servicio-daemon").await {
-                    Ok(t) => t,
-                    Err(e) => {
-                        eprintln!("daemon not ready: {e}");
-                        return;
+                let token = {
+                    let mut attempt = 0;
+                    loop {
+                        attempt += 1;
+                        match ensure_daemon(&base, "servicio-daemon").await {
+                            Ok(t) => break t,
+                            Err(e) if attempt < 3 => {
+                                eprintln!("daemon not ready (attempt {attempt}/3): {e}");
+                                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                            }
+                            Err(e) => {
+                                eprintln!("daemon not ready: {e}");
+                                return;
+                            }
+                        }
                     }
                 };
                 let socket = socket_path(&base);

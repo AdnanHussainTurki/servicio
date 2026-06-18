@@ -7,8 +7,10 @@ interface State {
   workers: Record<string, WorkerStatus>;
   logs: Record<string, string[]>;
   daemon: DaemonStatus | null;
+  lastError: string | null;
   setWorkers: (list: WorkerStatus[]) => void;
   setDaemon: (d: DaemonStatus) => void;
+  setError: (msg: string | null) => void;
   applyEvent: (e: WorkerEvent) => void;
   reset: () => void;
 }
@@ -17,9 +19,11 @@ export const useStore = create<State>((set) => ({
   workers: {},
   logs: {},
   daemon: null,
+  lastError: null,
   setWorkers: (list) =>
     set(() => ({ workers: Object.fromEntries(list.map((w) => [w.name, w])) })),
   setDaemon: (daemon) => set(() => ({ daemon })),
+  setError: (lastError) => set(() => ({ lastError })),
   applyEvent: (e) =>
     set((s) => {
       if (e.kind === "state") {
@@ -36,5 +40,5 @@ export const useStore = create<State>((set) => ({
         return { logs: { ...s.logs, [e.worker]: next } };
       }
     }),
-  reset: () => set(() => ({ workers: {}, logs: {}, daemon: null })),
+  reset: () => set(() => ({ workers: {}, logs: {}, daemon: null, lastError: null })),
 }));
