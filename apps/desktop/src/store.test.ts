@@ -29,4 +29,11 @@ describe("store", () => {
     expect(logs.length).toBe(1000);
     expect(logs[logs.length - 1]).toContain("l1099");
   });
+
+  it("sets and clears the last error", () => {
+    useStore.getState().setError("boom");
+    expect(useStore.getState().lastError).toBe("boom");
+    useStore.getState().setError(null);
+    expect(useStore.getState().lastError).toBeNull();
+  });
 });

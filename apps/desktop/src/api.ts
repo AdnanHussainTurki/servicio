@@ -26,7 +26,25 @@ export const api = {
 
 /** Wire daemon events into the store. Call once at app start. */
 export async function subscribeEvents() {
-  await listen<WorkerEvent>("worker-event", (ev) => {
-    useStore.getState().applyEvent(ev.payload);
-  });
+  try {
+    await listen<WorkerEvent>("worker-event", (ev) => {
+      useStore.getState().applyEvent(ev.payload);
+    });
+  } catch (err) {
+    console.warn("subscribeEvents failed:", err);
+    return;
+  }
+}
+
+/**
+ * Await a command promise; on rejection record the error in the store
+ * (for the error toast) and resolve to undefined instead of throwing.
+ */
+export async function withError<T>(p: Promise<T>): Promise<T | undefined> {
+  try {
+    return await p;
+  } catch (err) {
+    useStore.getState().setError(String(err));
+    return undefined;
+  }
 }
