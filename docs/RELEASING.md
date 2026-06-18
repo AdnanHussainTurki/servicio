@@ -47,3 +47,11 @@ After install, enable always-on via the GUI Settings "Start on login" toggle, or
 ```bash
 servicio-daemon install-service
 ```
+
+## Error reporting (Sentry)
+Set `SERVICIO_SENTRY_DSN` in the daemon's environment to enable crash/error reporting:
+```bash
+SERVICIO_SENTRY_DSN="https://...@sentry.io/123" servicio-daemon serve
+```
+When set, daemon panics and ERROR-level events (e.g. worker spawn failures) are sent to Sentry.
+Unset = disabled (no-op). The GUI passes the daemon's environment through when it spawns the sidecar.

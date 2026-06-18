@@ -5,6 +5,8 @@ use servicio_daemon_lib::{add_worker, db::Db};
 fn init_daemon_logging(path: &std::path::Path) {
     use std::sync::{Arc, Mutex};
     use tracing_subscriber::fmt::MakeWriter;
+    use tracing_subscriber::prelude::*;
+    use tracing_subscriber::{fmt, EnvFilter, Registry};
 
     #[derive(Clone)]
     struct FileWriter(Arc<Mutex<std::fs::File>>);
@@ -17,18 +19,29 @@ fn init_daemon_logging(path: &std::path::Path) {
         fn make_writer(&'a self) -> Self::Writer { self.clone() }
     }
 
-    if let Ok(file) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
-        let writer = FileWriter(Arc::new(Mutex::new(file)));
-        let _ = tracing_subscriber::fmt()
-            .with_ansi(false)
-            .with_writer(writer)
-            .with_env_filter(tracing_subscriber::EnvFilter::new("info"))
-            .try_init();
-    }
+    let Ok(file) = std::fs::OpenOptions::new().create(true).append(true).open(path) else { return };
+    let writer = FileWriter(Arc::new(Mutex::new(file)));
+    let fmt_layer = fmt::layer().with_ansi(false).with_writer(writer);
+    let _ = Registry::default()
+        .with(EnvFilter::new("info"))
+        .with(fmt_layer)
+        .with(sentry_tracing::layer())   // forwards ERROR events to Sentry (no-op if Sentry uninitialized)
+        .try_init();
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Optional Sentry error reporting. No-op unless SERVICIO_SENTRY_DSN is set.
+    let _sentry_guard = std::env::var("SERVICIO_SENTRY_DSN").ok().filter(|d| !d.is_empty()).map(|dsn| {
+        sentry::init((
+            dsn,
+            sentry::ClientOptions {
+                release: Some(env!("CARGO_PKG_VERSION").into()),
+                ..Default::default()
+            },
+        ))
+    });
+
     let cli = Cli::parse();
     match cli.command {
         Command::Add { name, command, args, working_dir, concurrency, autostart } => {

@@ -27,6 +27,8 @@ clap.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+sentry = { version = "0.34", default-features = true }
+sentry-tracing = "0.34"
 
 [dev-dependencies]
 tempfile.workspace = true
