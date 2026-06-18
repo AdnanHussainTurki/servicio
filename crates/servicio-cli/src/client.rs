@@ -71,6 +71,12 @@ impl Client {
         self.request("stop_worker", json!({ "name": name })).await.map(|_| ())
     }
 
+    pub async fn export_workers(&mut self) -> Result<serde_json::Value> { self.request("export_workers", json!({})).await }
+
+    pub async fn import_workers(&mut self, workers: serde_json::Value) -> Result<serde_json::Value> { self.request("import_workers", json!({"workers": workers})).await }
+
+    pub async fn remove_worker(&mut self, name: &str) -> Result<serde_json::Value> { self.request("remove_worker", json!({"name": name})).await }
+
     pub async fn start_group(&mut self, group: &str) -> Result<serde_json::Value> { self.request("start_group", json!({"group": group})).await }
 
     pub async fn stop_group(&mut self, group: &str) -> Result<serde_json::Value> { self.request("stop_group", json!({"group": group})).await }

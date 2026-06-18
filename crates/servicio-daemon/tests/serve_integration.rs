@@ -363,6 +363,32 @@ async fn start_group_starts_all_workers_in_group() {
 }
 
 #[tokio::test]
+async fn export_then_import_workers_roundtrips() {
+    let dir = tempfile::tempdir().unwrap();
+    let paths = Paths::new(dir.path().to_path_buf());
+    let h = start(paths.clone(), "secret".into()).await;
+    let _ = hello_then(&paths.socket(), vec![
+        Frame::Request { id: 1, method: "add_worker".into(), params: json!({"spec": sleeper("q")}) },
+    ]).await;
+    let exp = hello_then(&paths.socket(), vec![
+        Frame::Request { id: 1, method: "export_workers".into(), params: json!({}) },
+    ]).await;
+    let workers = match &exp[1] { Frame::Response { id:1, result: Some(v), .. } => v["workers"].clone(), o => panic!("{o:?}") };
+    assert_eq!(workers.as_array().unwrap().len(), 1);
+    // import into a fresh daemon
+    let dir2 = tempfile::tempdir().unwrap();
+    let paths2 = Paths::new(dir2.path().to_path_buf());
+    let h2 = start(paths2.clone(), "secret".into()).await;
+    let imp = hello_then(&paths2.socket(), vec![
+        Frame::Request { id: 1, method: "import_workers".into(), params: json!({"workers": workers}) },
+        Frame::Request { id: 2, method: "list_workers".into(), params: json!({}) },
+    ]).await;
+    match &imp[1] { Frame::Response { id:1, result: Some(v), .. } => assert_eq!(v["imported"], 1), o => panic!("{o:?}") }
+    match &imp[2] { Frame::Response { id:2, result: Some(v), .. } => assert_eq!(v.as_array().unwrap().len(), 1), o => panic!("{o:?}") }
+    h.shutdown().await; h2.shutdown().await;
+}
+
+#[tokio::test]
 async fn detect_workers_finds_laravel_in_fixture() {
     let dir = tempfile::tempdir().unwrap();
     let paths = Paths::new(dir.path().to_path_buf());

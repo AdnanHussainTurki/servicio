@@ -44,6 +44,21 @@ async fn restart_worker(state: tauri::State<'_, AppState>, name: String) -> Resu
 }
 
 #[tauri::command]
+async fn remove_worker(state: tauri::State<'_, AppState>, name: String) -> Result<(), String> {
+    bridge::remove_worker(&state, &name).await
+}
+
+#[tauri::command]
+async fn export_workers_to(state: tauri::State<'_, AppState>, path: String) -> Result<u32, String> {
+    bridge::export_workers_to(&state, &path).await
+}
+
+#[tauri::command]
+async fn import_workers_from(state: tauri::State<'_, AppState>, path: String) -> Result<u32, String> {
+    bridge::import_workers_from(&state, &path).await
+}
+
+#[tauri::command]
 async fn start_group(state: tauri::State<'_, AppState>, group: String) -> Result<serde_json::Value, String> {
     bridge::start_group(&state, &group).await
 }
@@ -131,6 +146,9 @@ fn main() {
             daemon_status,
             list_workers,
             add_worker,
+            remove_worker,
+            export_workers_to,
+            import_workers_from,
             get_worker,
             start_worker,
             stop_worker,
