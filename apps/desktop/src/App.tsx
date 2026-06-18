@@ -4,6 +4,7 @@ import { api, subscribeEvents } from "./api";
 import { Sidebar } from "./components/Sidebar";
 import { StatusFooter } from "./components/StatusFooter";
 import { Dashboard } from "./components/Dashboard";
+import { GroupsView } from "./components/GroupsView";
 import { WorkerDetail } from "./components/WorkerDetail";
 import { CreateFlow } from "./components/CreateFlow";
 import type { EditSpec } from "./components/CreateFlow";
@@ -94,6 +95,8 @@ export default function App() {
             )
           ) : detail ? (
             <WorkerDetail name={detail} onBack={() => setDetail(null)} onEdit={() => setEditing(detail)} />
+          ) : view === "groups" ? (
+            <GroupsView onOpenWorker={setDetail} onAddWorker={() => setAdding(true)} />
           ) : (
             <Dashboard
               onOpen={setDetail}
