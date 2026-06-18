@@ -186,6 +186,10 @@ export function CreateFlow({
   const [maxRetries, setMaxRetries] = useState(5);
   const [autostart, setAutostart] = useState(true);
 
+  /* organization */
+  const [group, setGroup] = useState("");
+  const [tags, setTags] = useState("");
+
   const [saving, setSaving] = useState(false);
 
   async function scan() {
@@ -230,6 +234,8 @@ export function CreateFlow({
     setCommand(draft.command);
     setArgs(draft.args.join(" "));
     setDir(draft.working_dir || ".");
+    setGroup(draft.group ?? "");
+    setTags(draft.tags?.join(", ") ?? "");
     const rm = draft.run_mode;
     setMode(rm.type);
     if (rm.type === "daemon") setConcurrency(rm.concurrency);
@@ -293,6 +299,8 @@ export function CreateFlow({
       },
       autostart,
       enabled: true,
+      group: group.trim() || null,
+      tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
     };
   }
 
@@ -575,6 +583,27 @@ export function CreateFlow({
               />
               Autostart on daemon boot
             </label>
+
+            <div className="grid grid-cols-2 gap-4 border-t border-stone-100 pt-5 dark:border-white/[0.05]">
+              <Field id="cf-group" label="Group" hint="optional">
+                <input
+                  id="cf-group"
+                  className={fieldCls}
+                  placeholder="e.g. my-app"
+                  value={group}
+                  onChange={(e) => setGroup(e.target.value)}
+                />
+              </Field>
+              <Field id="cf-tags" label="Tags" hint="optional">
+                <input
+                  id="cf-tags"
+                  className={fieldCls}
+                  placeholder="comma,separated"
+                  value={tags}
+                  onChange={(e) => setTags(e.target.value)}
+                />
+              </Field>
+            </div>
           </div>
           <StepNav onBack={() => goto("Mode")} onNext={() => goto("Review")} />
         </div>
@@ -599,6 +628,8 @@ export function CreateFlow({
                 ["working_dir", dir || "."],
                 ["restart", `${restartKind} · ≤${maxRetries}`],
                 ["autostart", autostart ? "yes" : "no"],
+                ["group", group.trim() || "—"],
+                ["tags", tags.split(",").map((t) => t.trim()).filter(Boolean).join(", ") || "—"],
               ].map(([k, v]) => (
                 <div key={k}>
                   <dt className="text-[10px] uppercase tracking-[0.14em] text-stone-400 dark:text-stone-500">{k}</dt>

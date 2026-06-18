@@ -15,6 +15,8 @@ export interface WorkerStatus {
   name: string;
   run_mode: RunMode;
   instances: InstanceStatus[];
+  group?: string | null;
+  tags?: string[];
 }
 export interface DaemonStatus {
   connected: boolean;
@@ -37,6 +39,7 @@ export type RunModeAny =
 export interface SuggestionDraft {
   label: string; source: string; name: string;
   command: string; args: string[]; working_dir: string; run_mode: RunModeAny;
+  group?: string | null; tags?: string[];
 }
 export interface MetricPointT { ts: number; cpu: number; mem: number }
 export interface MetricEventPayload { kind: "metric"; worker: string; instance: number; ts: number; cpu: number; mem: number }

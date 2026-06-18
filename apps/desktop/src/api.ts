@@ -14,6 +14,8 @@ export interface AddWorkerSpec {
   restart: { kind: string; max_retries: number; base_secs: number; max_secs: number; reset_window_secs: number };
   autostart: boolean;
   enabled: boolean;
+  group?: string | null;
+  tags?: string[];
 }
 
 export const api = {
