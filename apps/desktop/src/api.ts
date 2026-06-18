@@ -6,6 +6,7 @@ import { notifyStateEvent } from "./notify";
 
 export interface AddWorkerSpec {
   name: string;
+  display_name?: string | null;
   command: string;
   args: string[];
   working_dir: string;

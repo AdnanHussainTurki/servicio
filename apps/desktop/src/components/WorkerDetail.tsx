@@ -54,9 +54,16 @@ export function WorkerDetail({ name, onBack, onEdit, onDelete }: { name: string;
         <span className={`absolute inset-y-0 left-0 w-1 ${s.rail}`} aria-hidden />
         <div className="flex flex-wrap items-center gap-x-4 gap-y-3 pl-2">
           <StatusDot state={state} />
-          <h2 className="font-display text-2xl font-bold tracking-tight text-stone-900 dark:text-stone-50">
-            {name}
-          </h2>
+          <div className="min-w-0">
+            <h2 className="truncate font-display text-2xl font-bold tracking-tight text-stone-900 dark:text-stone-50">
+              {w.display_name?.trim() || name}
+            </h2>
+            {w.display_name?.trim() && w.display_name.trim() !== name && (
+              <p className="mt-0.5 font-mono text-[11px] text-stone-400 dark:text-stone-500">
+                id: {name}
+              </p>
+            )}
+          </div>
           <span
             className={`rounded-md px-2 py-0.5 font-mono text-[11px] font-medium uppercase tracking-wide ring-1 ring-inset ${s.chip}`}
           >

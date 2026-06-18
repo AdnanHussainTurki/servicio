@@ -1,11 +1,13 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { api } from "../api";
 import type { AddWorkerSpec } from "../api";
+import { useStore } from "../store";
 import type { SuggestionDraft, RunModeAny } from "../types";
 
 /** Full WorkerSpec shape returned by `api.getWorker`, used to prefill edit mode. */
 export interface EditSpec {
   name: string;
+  display_name?: string | null;
   command: string;
   args: string[];
   working_dir: string;
@@ -178,6 +180,17 @@ export function CreateFlow({
   const editing = !!editWorker;
   const erm = editWorker?.run_mode;
 
+  // Distinct existing groups + tags across all known workers — power the group
+  // combobox datalist and the tag suggestion chips.
+  const workersMap = useStore((s) => s.workers);
+  const { existingGroups, existingTags } = useMemo(() => {
+    const ws = Object.values(workersMap);
+    return {
+      existingGroups: [...new Set(ws.map((w) => w.group).filter(Boolean))] as string[],
+      existingTags: [...new Set(ws.flatMap((w) => w.tags ?? []))],
+    };
+  }, [workersMap]);
+
   // In edit mode we skip Detect and land directly on Command.
   const [step, setStep] = useState<StepName>(editing ? "Command" : "Detect");
   const activeIdx = STEPS.indexOf(step);
@@ -193,6 +206,7 @@ export function CreateFlow({
 
   /* command step */
   const [name, setName] = useState(editWorker?.name ?? "");
+  const [displayName, setDisplayName] = useState(editWorker?.display_name ?? "");
   const [command, setCommand] = useState(editWorker?.command ?? "");
   const [args, setArgs] = useState(editWorker?.args.join(" ") ?? "");
   const [dir, setDir] = useState(editWorker?.working_dir || ".");
@@ -264,6 +278,7 @@ export function CreateFlow({
   /** Seed the wizard fields from a draft and advance to Command. */
   function adopt(draft: SuggestionDraft) {
     setName(draft.name);
+    setDisplayName(draft.display_name ?? "");
     setCommand(draft.command);
     setArgs(draft.args.join(" "));
     setDir(draft.working_dir || ".");
@@ -295,11 +310,25 @@ export function CreateFlow({
 
   function fromScratch() {
     setName("");
+    setDisplayName("");
     setCommand("");
     setArgs("");
     setDir(folder || ".");
     setMode("daemon");
     setStep("Command");
+  }
+
+  // Currently-entered tags (parsed from the comma input) — drives which
+  // suggestion chips remain offered.
+  const selectedTags = tags.split(",").map((t) => t.trim()).filter(Boolean);
+
+  /** Append a suggested tag to the comma input if not already present. */
+  function addTag(tag: string) {
+    setTags((prev) => {
+      const cur = prev.split(",").map((t) => t.trim()).filter(Boolean);
+      if (cur.includes(tag)) return prev;
+      return cur.length ? `${cur.join(", ")}, ${tag}` : tag;
+    });
   }
 
   function buildRunMode(): RunModeAny {
@@ -316,6 +345,7 @@ export function CreateFlow({
   function buildSpec(): AddWorkerSpec {
     return {
       name,
+      display_name: displayName.trim() || null,
       command,
       args: args.trim() ? args.trim().split(/\s+/) : [],
       working_dir: dir || ".",
@@ -519,6 +549,15 @@ export function CreateFlow({
                 <input id="cf-name" className={fieldCls} placeholder="queue-worker" value={name} onChange={(e) => setName(e.target.value)} />
               )}
             </Field>
+            <Field id="cf-display-name" label="Display name" hint="shown on cards — optional">
+              <input
+                id="cf-display-name"
+                className={fieldCls}
+                placeholder="e.g. Queue Worker (optional)"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+              />
+            </Field>
             <Field id="cf-cmd" label="Command">
               <input id="cf-cmd" className={fieldCls} placeholder="php" value={command} onChange={(e) => setCommand(e.target.value)} />
             </Field>
@@ -645,16 +684,23 @@ export function CreateFlow({
             </label>
 
             <div className="grid grid-cols-2 gap-4 border-t border-stone-100 pt-5 dark:border-white/[0.05]">
-              <Field id="cf-group" label="Group" hint="optional">
+              <Field id="cf-group" label="Group" hint="pick or type">
                 <input
                   id="cf-group"
+                  list="cf-groups"
                   className={fieldCls}
                   placeholder="e.g. my-app"
                   value={group}
                   onChange={(e) => setGroup(e.target.value)}
+                  autoComplete="off"
                 />
+                <datalist id="cf-groups">
+                  {existingGroups.map((g) => (
+                    <option key={g} value={g} />
+                  ))}
+                </datalist>
               </Field>
-              <Field id="cf-tags" label="Tags" hint="optional">
+              <Field id="cf-tags" label="Tags" hint="comma-separated">
                 <input
                   id="cf-tags"
                   className={fieldCls}
@@ -664,6 +710,33 @@ export function CreateFlow({
                 />
               </Field>
             </div>
+
+            {/* tag suggestion chips — click to append; only shows tags not yet picked */}
+            {existingTags.some((t) => !selectedTags.includes(t)) && (
+              <div className="-mt-1">
+                <span className="mb-1.5 block font-mono text-[10px] uppercase tracking-[0.14em] text-stone-400 dark:text-stone-500">
+                  Suggested tags
+                </span>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {existingTags
+                    .filter((t) => !selectedTags.includes(t))
+                    .map((t) => (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => addTag(t)}
+                        aria-label={`Add tag ${t}`}
+                        className="rounded font-mono text-[10px] font-medium tracking-wide text-stone-500
+                          ring-1 ring-inset ring-stone-300/70 px-1.5 py-0.5 transition
+                          hover:bg-signal-500/[0.08] hover:text-signal-600 hover:ring-signal-500/30
+                          dark:text-stone-400 dark:ring-white/10 dark:hover:text-signal-400"
+                      >
+                        + {t}
+                      </button>
+                    ))}
+                </div>
+              </div>
+            )}
           </div>
           <StepNav onBack={() => goto("Mode")} onNext={() => goto("Review")} />
         </div>
@@ -683,6 +756,7 @@ export function CreateFlow({
             <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
               {[
                 ["name", name || "—"],
+                ["display_name", displayName.trim() || "—"],
                 ["command", command || "—"],
                 ["args", args.trim() || "—"],
                 ["working_dir", dir || "."],
