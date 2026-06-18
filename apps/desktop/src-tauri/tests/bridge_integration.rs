@@ -77,3 +77,23 @@ fn non_event_frame_maps_to_none() {
     let frame = Frame::Response { id: 1, result: None, error: None };
     assert!(event_payload(&frame).is_none());
 }
+
+#[tokio::test]
+async fn detect_workers_via_bridge_finds_generic() {
+    let dir = tempfile::tempdir().unwrap();
+    let (_p, handle, state) = running_daemon(dir.path()).await;
+    let proj = dir.path().join("proj");
+    std::fs::create_dir_all(&proj).unwrap();
+    let suggestions = bridge::detect_workers(&state, proj.to_str().unwrap()).await.unwrap();
+    assert!(suggestions.as_array().unwrap().iter().any(|s| s["source"] == "generic"));
+    handle.shutdown().await;
+}
+
+#[tokio::test]
+async fn metrics_via_bridge_returns_array() {
+    let dir = tempfile::tempdir().unwrap();
+    let (_p, handle, state) = running_daemon(dir.path()).await;
+    let v = bridge::metrics(&state, "nope", 900).await.unwrap();
+    assert!(v.is_array());
+    handle.shutdown().await;
+}

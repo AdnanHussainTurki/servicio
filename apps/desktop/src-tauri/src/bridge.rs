@@ -41,6 +41,16 @@ pub struct DaemonStatus {
     pub running_count: u32,
 }
 
+pub async fn detect_workers(state: &AppState, path: &str) -> Result<serde_json::Value, String> {
+    let mut client = state.client.lock().await;
+    client.detect(path).await.map_err(|e| e.to_string())
+}
+
+pub async fn metrics(state: &AppState, worker: &str, since_secs: u64) -> Result<serde_json::Value, String> {
+    let mut client = state.client.lock().await;
+    client.metrics(worker, since_secs).await.map_err(|e| e.to_string())
+}
+
 pub async fn daemon_status(state: &AppState) -> Result<DaemonStatus, String> {
     let mut client = state.client.lock().await;
     match client.daemon_info().await {
