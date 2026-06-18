@@ -6,6 +6,7 @@ import { StatusFooter } from "./components/StatusFooter";
 import { Dashboard } from "./components/Dashboard";
 import { WorkerDetail } from "./components/WorkerDetail";
 import { CreateFlow } from "./components/CreateFlow";
+import { SettingsView } from "./components/SettingsView";
 
 export default function App() {
   const [view, setView] = useState("dashboard");
@@ -33,12 +34,7 @@ export default function App() {
         <Sidebar view={view} setView={setView} />
         <main className="scroll-thin flex-1 overflow-auto">
           {view === "settings" ? (
-            <div className="mx-auto max-w-2xl p-6">
-              <h1 className="font-display text-2xl font-bold tracking-tight">Settings</h1>
-              <p className="mt-2 text-sm text-stone-500 dark:text-stone-400">
-                Settings coming soon.
-              </p>
-            </div>
+            <SettingsView />
           ) : adding ? (
             <CreateFlow
               onDone={() => setAdding(false)}
