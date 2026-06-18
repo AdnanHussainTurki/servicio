@@ -1,8 +1,13 @@
 import { useEffect, useRef } from "react";
 import { useStore } from "../store";
 
+// Stable empty-array reference. Returning `?? []` from inside the selector creates a NEW
+// array every render, which Zustand v5 + React 19 treat as a state change → infinite loop
+// ("Maximum update depth exceeded"). Default OUTSIDE the selector against this constant.
+const EMPTY_LINES: string[] = [];
+
 export function LogView({ worker }: { worker: string }) {
-  const lines = useStore((s) => s.logs[worker] ?? []);
+  const lines = useStore((s) => s.logs[worker]) ?? EMPTY_LINES;
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (ref.current && typeof ref.current.scrollTo === "function") {
