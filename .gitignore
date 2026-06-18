@@ -12,3 +12,4 @@ apps/desktop/src-tauri/binaries/
 .DS_Store
 .playwright-mcp/
 /*.png
+.secrets/
