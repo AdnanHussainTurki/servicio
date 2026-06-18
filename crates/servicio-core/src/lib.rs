@@ -9,6 +9,7 @@ pub mod event;
 pub mod logsink;
 pub mod manager;
 pub mod process;
+pub mod schedule;
 pub mod state;
 pub mod supervisor;
 pub mod worker;
