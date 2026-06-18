@@ -1,9 +1,15 @@
 # Releasing Servicio
 
+## Prerequisites
+- `rustup target add x86_64-apple-darwin` (for the Intel half of the universal build).
+- Use the **rustup** toolchain for the universal build, not a Homebrew `rust` — only rustup
+  ships the cross-arch std. If `cargo`/`rustc` resolve to `/opt/homebrew/bin`, prefix the
+  build with the rustup shim: `PATH="$HOME/.cargo/bin:$PATH" npm run build:universal`.
+
 ## Universal (Intel + Apple Silicon) build
 ```bash
 cd apps/desktop
-npm run build:universal        # builds the universal sidecar + universal .app/.dmg
+PATH="$HOME/.cargo/bin:$PATH" npm run build:universal   # universal sidecar + universal .app/.dmg
 ```
 Output: `src-tauri/target/universal-apple-darwin/release/bundle/{macos,dmg}/`.
 
