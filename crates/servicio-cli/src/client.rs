@@ -83,6 +83,10 @@ impl Client {
         self.request("detect_workers", json!({ "path": path })).await
     }
 
+    pub async fn daemon_log(&mut self, lines: u64) -> Result<serde_json::Value> {
+        self.request("daemon_log", json!({ "lines": lines })).await
+    }
+
     /// Send a subscribe request, consume the ack, then yield raw event lines.
     pub async fn subscribe(
         mut self,

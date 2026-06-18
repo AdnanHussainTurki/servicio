@@ -23,6 +23,7 @@ pub struct Daemon {
     pub db: Mutex<Db>,
     pub started: std::time::Instant,
     pub version: String,
+    pub log_path: std::path::PathBuf,
 }
 
 /// Handle to a running server; used to stop it.
@@ -64,6 +65,7 @@ pub async fn serve(paths: Paths, token: String) -> std::io::Result<ServeHandle> 
         db: Mutex::new(db),
         started: std::time::Instant::now(),
         version: env!("CARGO_PKG_VERSION").to_string(),
+        log_path: paths.base.join("daemon.log"),
     });
 
     {
@@ -278,8 +280,14 @@ async fn dispatch(daemon: &Arc<Daemon>, id: u64, method: &str, params: serde_jso
                     let name = spec.name.clone();
                     let db = daemon.db.lock().await;
                     match db.upsert_worker(&spec) {
-                        Ok(()) => Frame::ok(id, json!({"name": name})),
-                        Err(e) => Frame::err(id, "db_error", &e.to_string()),
+                        Ok(()) => {
+                            tracing::info!("add_worker '{name}'");
+                            Frame::ok(id, json!({"name": name}))
+                        }
+                        Err(e) => {
+                            tracing::warn!("add_worker '{name}' failed: {e}");
+                            Frame::err(id, "db_error", &e.to_string())
+                        }
                     }
                 }
                 Err(e) => Frame::err(id, "bad_params", &e.to_string()),
@@ -293,8 +301,14 @@ async fn dispatch(daemon: &Arc<Daemon>, id: u64, method: &str, params: serde_jso
             }
             let db = daemon.db.lock().await;
             match db.remove_worker(&name) {
-                Ok(removed) => Frame::ok(id, json!({"removed": removed})),
-                Err(e) => Frame::err(id, "db_error", &e.to_string()),
+                Ok(removed) => {
+                    tracing::info!("remove_worker '{name}' (removed={removed})");
+                    Frame::ok(id, json!({"removed": removed}))
+                }
+                Err(e) => {
+                    tracing::warn!("remove_worker '{name}' failed: {e}");
+                    Frame::err(id, "db_error", &e.to_string())
+                }
             }
         }
         "start_worker" => {
@@ -306,16 +320,24 @@ async fn dispatch(daemon: &Arc<Daemon>, id: u64, method: &str, params: serde_jso
                 Ok(Some(spec)) => {
                     let mut mgr = daemon.manager.lock().await;
                     mgr.start_worker(spec).await;
+                    tracing::info!("start_worker '{name}'");
                     Frame::ok(id, json!({"started": true}))
                 }
-                Ok(None) => Frame::err(id, "not_found", &format!("no worker '{name}'")),
-                Err(e) => Frame::err(id, "db_error", &e.to_string()),
+                Ok(None) => {
+                    tracing::warn!("start_worker '{name}' not found");
+                    Frame::err(id, "not_found", &format!("no worker '{name}'"))
+                }
+                Err(e) => {
+                    tracing::warn!("start_worker '{name}' failed: {e}");
+                    Frame::err(id, "db_error", &e.to_string())
+                }
             }
         }
         "stop_worker" => {
             let name = params.get("name").and_then(|n| n.as_str()).unwrap_or("").to_string();
             let mut mgr = daemon.manager.lock().await;
             let stopped = mgr.stop_worker(&name).await;
+            tracing::info!("stop_worker '{name}' (stopped={stopped})");
             Frame::ok(id, json!({"stopped": stopped}))
         }
         "metrics" => {
@@ -344,6 +366,13 @@ async fn dispatch(daemon: &Arc<Daemon>, id: u64, method: &str, params: serde_jso
                 Ok(v) => Frame::ok(id, v),
                 Err(e) => Frame::err(id, "internal", &e.to_string()),
             }
+        }
+        "daemon_log" => {
+            let lines = params.get("lines").and_then(|n| n.as_u64()).unwrap_or(200) as usize;
+            let body = std::fs::read_to_string(&daemon.log_path).unwrap_or_default();
+            let tail: Vec<&str> = body.lines().rev().take(lines).collect();
+            let text: String = tail.into_iter().rev().collect::<Vec<_>>().join("\n");
+            Frame::ok(id, serde_json::json!({ "log": text }))
         }
         other => Frame::err(id, "unknown_method", &format!("no such method: {other}")),
     }

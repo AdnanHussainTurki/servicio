@@ -26,6 +26,7 @@ sysinfo = "0.32"
 clap.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [dev-dependencies]
 tempfile.workspace = true

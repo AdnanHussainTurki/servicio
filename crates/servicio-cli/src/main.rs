@@ -30,6 +30,12 @@ enum Command {
     Metrics { name: String },
     /// Scan a folder and suggest workers (autodetect).
     Detect { path: String },
+    /// Show the tail of the daemon's own log.
+    DaemonLog {
+        /// Number of trailing log lines to show.
+        #[arg(long, default_value_t = 200)]
+        lines: u64,
+    },
 }
 
 fn base_dir(arg: Option<PathBuf>) -> PathBuf {
@@ -83,6 +89,10 @@ async fn main() -> Result<()> {
         Command::Detect { path } => {
             let v = client.detect(&path).await?;
             println!("{}", serde_json::to_string_pretty(&v)?);
+        }
+        Command::DaemonLog { lines } => {
+            let v = client.daemon_log(lines).await?;
+            println!("{}", v.get("log").and_then(|l| l.as_str()).unwrap_or(""));
         }
         Command::Logs { name } => {
             let mut lines = client.subscribe(&["log"], Some(&name)).await?;
