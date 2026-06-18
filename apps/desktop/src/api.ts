@@ -27,6 +27,9 @@ export const api = {
   startGroup: (group: string) => invoke<{ started: number }>("start_group", { group }),
   stopGroup: (group: string) => invoke<{ stopped: number }>("stop_group", { group }),
   addWorker: (spec: AddWorkerSpec) => invoke<void>("add_worker", { spec }),
+  removeWorker: (name: string) => invoke<void>("remove_worker", { name }),
+  exportWorkersTo: (path: string) => invoke<number>("export_workers_to", { path }),
+  importWorkersFrom: (path: string) => invoke<number>("import_workers_from", { path }),
   getWorker: (name: string) => invoke<any>("get_worker", { name }),
   detectWorkers: (path: string) => invoke<SuggestionDraft[]>("detect_workers", { path }),
   metrics: (worker: string, sinceSecs: number) => invoke<{ instance: number; points: MetricPointT[] }[]>("metrics", { worker, sinceSecs }),
@@ -39,6 +42,12 @@ export const api = {
       const r = await open({ directory: true, multiple: false });
       return typeof r === "string" ? r : null;
     } catch { return null; }
+  },
+  saveDialog: async (defaultName: string): Promise<string | null> => {
+    try { const { save } = await import("@tauri-apps/plugin-dialog"); const p = await save({ defaultPath: defaultName, filters: [{ name: "JSON", extensions: ["json"] }] }); return p ?? null; } catch { return null; }
+  },
+  openFileDialog: async (): Promise<string | null> => {
+    try { const { open } = await import("@tauri-apps/plugin-dialog"); const r = await open({ multiple: false, filters: [{ name: "JSON", extensions: ["json"] }] }); return typeof r === "string" ? r : null; } catch { return null; }
   },
   installService: () => invoke<void>("install_service"),
   uninstallService: () => invoke<void>("uninstall_service"),

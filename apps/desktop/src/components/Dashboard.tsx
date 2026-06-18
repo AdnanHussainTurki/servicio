@@ -4,6 +4,7 @@ import { api, withError } from "../api";
 import type { WorkerStatus } from "../types";
 import { computeGroups, fmtMem, type GroupStat } from "../groupStats";
 import { WorkerCard } from "./WorkerCard";
+import { DashboardGraphs } from "./DashboardGraphs";
 
 const UNGROUPED = "Ungrouped";
 
@@ -123,10 +124,12 @@ function WorkerGrid({
   workers,
   onOpen,
   onEditWorker,
+  onDeleteWorker,
 }: {
   workers: WorkerStatus[];
   onOpen: (name: string) => void;
   onEditWorker: (name: string) => void;
+  onDeleteWorker?: (name: string) => void;
 }) {
   return (
     <div className="grid auto-rows-min grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -138,6 +141,7 @@ function WorkerGrid({
             onStart={() => withError(api.startWorker(w.name))}
             onStop={() => withError(api.stopWorker(w.name))}
             onEdit={() => onEditWorker(w.name)}
+            onDelete={onDeleteWorker ? () => onDeleteWorker(w.name) : undefined}
           />
         </div>
       ))}
@@ -151,12 +155,14 @@ function GroupSection({
   stat,
   onOpen,
   onEditWorker,
+  onDeleteWorker,
 }: {
   name: string;
   workers: WorkerStatus[];
   stat: GroupStat | undefined;
   onOpen: (name: string) => void;
   onEditWorker: (name: string) => void;
+  onDeleteWorker?: (name: string) => void;
 }) {
   const [open, setOpen] = useState(true);
   return (
@@ -187,7 +193,7 @@ function GroupSection({
         <GroupStatStrip stat={stat} />
         <span className="ml-1 h-px flex-1 bg-stone-200/70 dark:bg-white/[0.06]" aria-hidden />
       </div>
-      {open && <WorkerGrid workers={workers} onOpen={onOpen} onEditWorker={onEditWorker} />}
+      {open && <WorkerGrid workers={workers} onOpen={onOpen} onEditWorker={onEditWorker} onDeleteWorker={onDeleteWorker} />}
     </section>
   );
 }
@@ -196,10 +202,12 @@ export function Dashboard({
   onOpen,
   onAdd,
   onEditWorker,
+  onDeleteWorker,
 }: {
   onOpen: (name: string) => void;
   onAdd: () => void;
   onEditWorker?: (name: string) => void;
+  onDeleteWorker?: (name: string) => void;
 }) {
   const workers = Object.values(useStore((s) => s.workers));
   const latestMetric = useStore((s) => s.latestMetric);
@@ -310,6 +318,7 @@ export function Dashboard({
         <EmptyState onAdd={onAdd} />
       ) : (
         <div className="flex-1 overflow-auto">
+          <DashboardGraphs />
           {allTags.length > 0 && (
             <div className="flex flex-wrap items-center gap-2 border-b border-stone-200/60 px-6 py-3 dark:border-white/[0.05]">
               <span className="mr-1 font-mono text-[10px] uppercase tracking-[0.16em] text-stone-400 dark:text-stone-500">
@@ -337,7 +346,7 @@ export function Dashboard({
               </p>
             ) : (
               sections.map(([name, list]) => (
-                <GroupSection key={name} name={name} workers={list} stat={statByGroup.get(name)} onOpen={onOpen} onEditWorker={onEditWorker ?? (() => {})} />
+                <GroupSection key={name} name={name} workers={list} stat={statByGroup.get(name)} onOpen={onOpen} onEditWorker={onEditWorker ?? (() => {})} onDeleteWorker={onDeleteWorker} />
               ))
             )}
           </div>

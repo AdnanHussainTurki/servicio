@@ -442,6 +442,32 @@ async fn dispatch(daemon: &Arc<Daemon>, id: u64, method: &str, params: serde_jso
             tracing::info!("stop_group '{group}' ({stopped})");
             Frame::ok(id, json!({"stopped": stopped}))
         }
+        "export_workers" => {
+            let db = daemon.db.lock().await;
+            match db.list_workers() {
+                Ok(specs) => match serde_json::to_value(specs) {
+                    Ok(v) => Frame::ok(id, json!({ "workers": v })),
+                    Err(e) => Frame::err(id, "internal", &e.to_string()),
+                },
+                Err(e) => Frame::err(id, "db_error", &e.to_string()),
+            }
+        }
+        "import_workers" => {
+            let specs: Result<Vec<servicio_core::worker::WorkerSpec>, _> =
+                serde_json::from_value(params.get("workers").cloned().unwrap_or(serde_json::Value::Null));
+            match specs {
+                Ok(specs) => {
+                    let db = daemon.db.lock().await;
+                    let mut n = 0u32;
+                    for s in &specs {
+                        if db.upsert_worker(s).is_ok() { n += 1; }
+                    }
+                    tracing::info!("import_workers ({n})");
+                    Frame::ok(id, json!({ "imported": n }))
+                }
+                Err(e) => Frame::err(id, "bad_params", &e.to_string()),
+            }
+        }
         other => Frame::err(id, "unknown_method", &format!("no such method: {other}")),
     }
 }

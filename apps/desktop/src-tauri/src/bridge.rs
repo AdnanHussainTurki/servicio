@@ -51,6 +51,28 @@ pub async fn restart_worker(state: &AppState, name: &str) -> Result<(), String> 
     client.start_worker(name).await.map_err(|e| e.to_string())
 }
 
+pub async fn remove_worker(state: &AppState, name: &str) -> Result<(), String> {
+    let mut c = state.client.lock().await;
+    c.remove_worker(name).await.map(|_| ()).map_err(|e| e.to_string())
+}
+
+pub async fn export_workers_to(state: &AppState, path: &str) -> Result<u32, String> {
+    let v = { let mut c = state.client.lock().await; c.export_workers().await.map_err(|e| e.to_string())? };
+    let arr = v.get("workers").cloned().unwrap_or(serde_json::Value::Array(vec![]));
+    let count = arr.as_array().map(|a| a.len()).unwrap_or(0) as u32;
+    let pretty = serde_json::to_string_pretty(&arr).map_err(|e| e.to_string())?;
+    std::fs::write(path, pretty).map_err(|e| e.to_string())?;
+    Ok(count)
+}
+
+pub async fn import_workers_from(state: &AppState, path: &str) -> Result<u32, String> {
+    let body = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
+    let workers: serde_json::Value = serde_json::from_str(&body).map_err(|e| format!("invalid config: {e}"))?;
+    let mut c = state.client.lock().await;
+    let res = c.import_workers(workers).await.map_err(|e| e.to_string())?;
+    Ok(res.get("imported").and_then(|n| n.as_u64()).unwrap_or(0) as u32)
+}
+
 pub async fn start_group(state: &AppState, group: &str) -> Result<serde_json::Value, String> { let mut c = state.client.lock().await; c.start_group(group).await.map_err(|e| e.to_string()) }
 
 pub async fn stop_group(state: &AppState, group: &str) -> Result<serde_json::Value, String> { let mut c = state.client.lock().await; c.stop_group(group).await.map_err(|e| e.to_string()) }

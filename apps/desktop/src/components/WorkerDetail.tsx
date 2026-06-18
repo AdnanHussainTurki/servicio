@@ -6,7 +6,7 @@ import { StatusDot } from "./StatusDot";
 import { worstState, styleFor } from "./status";
 import { useState } from "react";
 
-export function WorkerDetail({ name, onBack, onEdit }: { name: string; onBack: () => void; onEdit?: () => void }) {
+export function WorkerDetail({ name, onBack, onEdit, onDelete }: { name: string; onBack: () => void; onEdit?: () => void; onDelete?: () => void }) {
   const w = useStore((s) => s.workers[name]);
   const [tab, setTab] = useState<"logs" | "metrics" | "config">("logs");
 
@@ -79,6 +79,17 @@ export function WorkerDetail({ name, onBack, onEdit }: { name: string; onBack: (
             <button className="btn-ghost" onClick={() => onEdit?.()}>
               ✎ Edit
             </button>
+            {onDelete && (
+              <button
+                className="rounded-lg border border-rose-500/30 bg-rose-500/5 px-3 py-1.5 font-mono text-xs
+                  font-semibold text-rose-600 transition hover:border-rose-500/50 hover:bg-rose-500/10
+                  dark:text-rose-300"
+                onClick={() => onDelete()}
+                aria-label={`Delete ${name}`}
+              >
+                🗑 Delete
+              </button>
+            )}
           </div>
         </div>
 
