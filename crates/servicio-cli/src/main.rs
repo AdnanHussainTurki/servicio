@@ -26,6 +26,8 @@ enum Command {
     Stop { name: String },
     /// Stream logs for a worker (follow until Ctrl-C).
     Logs { name: String },
+    /// Show recent metrics (cpu/mem) for a worker.
+    Metrics { name: String },
 }
 
 fn base_dir(arg: Option<PathBuf>) -> PathBuf {
@@ -71,6 +73,10 @@ async fn main() -> Result<()> {
         Command::Stop { name } => {
             client.stop_worker(&name).await?;
             println!("stopped '{name}'");
+        }
+        Command::Metrics { name } => {
+            let v = client.metrics(&name, 900).await?;
+            println!("{}", serde_json::to_string_pretty(&v)?);
         }
         Command::Logs { name } => {
             let mut lines = client.subscribe(&["log"], Some(&name)).await?;
