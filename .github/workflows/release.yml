@@ -1,0 +1,65 @@
+name: Release
+
+# Build + publish the macOS universal app on a version tag (or manual dispatch).
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+
+# The release job needs write access to create/update the GitHub Release.
+permissions:
+  contents: write
+
+jobs:
+  macos-universal:
+    name: macOS universal build
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain (stable, both Apple arches)
+        uses: dtolnay/rust-toolchain@stable
+
+      # Universal build needs both targets' std (rustup-only cross-arch std).
+      - name: Add Apple targets
+        run: rustup target add x86_64-apple-darwin aarch64-apple-darwin
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: apps/desktop/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: apps/desktop
+        run: npm ci
+
+      # Builds the universal sidecar (prepare-sidecar:universal) then
+      # `tauri build --target universal-apple-darwin`. The PATH prefix forces
+      # the rustup toolchain (Homebrew rust lacks cross-arch std).
+      #
+      # NOTE: this produces an UNSIGNED build (no Apple Developer cert). The
+      # resulting .dmg/.app run locally after a right-click -> Open (or
+      # `xattr -dr com.apple.quarantine <app>`). To ship a signed + notarized
+      # build, add the APPLE_* signing env vars as repository secrets and export
+      # them in this step — see docs/RELEASING.md for the full list and steps.
+      - name: Build universal app
+        working-directory: apps/desktop
+        run: PATH="$HOME/.cargo/bin:$PATH" npm run build:universal
+
+      # Zip the .app for upload (a raw .app directory can't be a release asset).
+      - name: Zip .app bundle
+        working-directory: apps/desktop/src-tauri/target/universal-apple-darwin/release/bundle/macos
+        run: zip -ry Servicio-macos.app.zip *.app
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            apps/desktop/src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+            apps/desktop/src-tauri/target/universal-apple-darwin/release/bundle/macos/Servicio-macos.app.zip
