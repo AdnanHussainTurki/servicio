@@ -74,11 +74,7 @@ impl Db {
     }
 
     /// Returns (instance, points) grouped, points = (ts,cpu,mem), for ts >= since.
-    pub fn query_metrics(
-        &self,
-        worker: &str,
-        since: u64,
-    ) -> rusqlite::Result<Vec<InstanceSeries>> {
+    pub fn query_metrics(&self, worker: &str, since: u64) -> rusqlite::Result<Vec<InstanceSeries>> {
         let mut stmt = self.conn.prepare(
             "SELECT instance, ts, cpu, mem FROM metrics WHERE worker=?1 AND ts>=?2 ORDER BY instance, ts")?;
         let rows = stmt.query_map(rusqlite::params![worker, since as i64], |r| {
