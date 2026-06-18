@@ -278,6 +278,7 @@ async fn dispatch(daemon: &Arc<Daemon>, id: u64, method: &str, params: serde_jso
                     run_mode: spec.run_mode,
                     group: spec.group,
                     tags: spec.tags,
+                    display_name: spec.display_name,
                 })
                 .collect();
             match serde_json::to_value(list) {

@@ -27,6 +27,7 @@ pub struct WorkerStatusCore {
     pub instances: Vec<InstanceStatus>,
     pub group: Option<String>,
     pub tags: Vec<String>,
+    pub display_name: Option<String>,
 }
 
 #[cfg(test)]

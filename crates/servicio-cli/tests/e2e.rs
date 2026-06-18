@@ -26,6 +26,7 @@ async fn client_handshakes_and_lists_after_add() {
         enabled: true,
         group: None,
         tags: Vec::new(),
+        display_name: None,
     };
     client.add_worker(&spec).await.unwrap();
     let list = client.list_workers().await.unwrap();

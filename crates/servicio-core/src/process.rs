@@ -115,6 +115,7 @@ mod tests {
             enabled: true,
             group: None,
             tags: Vec::new(),
+            display_name: None,
         }
     }
 
@@ -158,7 +159,7 @@ mod tests {
             working_dir: dir.path().to_path_buf(), env: std::collections::BTreeMap::new(),
             run_mode: crate::worker::RunMode::Daemon { concurrency: 1 },
             restart: crate::worker::RestartPolicy::default(), autostart: false, enabled: true,
-            group: None, tags: vec![],
+            group: None, tags: vec![], display_name: None,
         };
         let mut sp = TokioProcess.spawn(&spec).unwrap();
         let mut out = String::new();
