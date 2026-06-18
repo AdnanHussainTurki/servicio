@@ -44,6 +44,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let cli = Cli::parse();
     match cli.command {
+        Command::BuildId => {
+            println!("{}", env!("SERVICIO_BUILD"));
+        }
         Command::Add { name, command, args, working_dir, concurrency, autostart } => {
             add_worker(&cli.db, &name, &command, &args, &working_dir, concurrency, autostart)?;
             println!("added worker '{name}'");
@@ -69,7 +72,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             tracing::info!("servicio daemon starting (base={})", paths.base.display());
             let handle = serve(paths, token).await?;
             println!("servicio daemon listening; press Ctrl-C to stop");
-            tokio::signal::ctrl_c().await?;
+            let stop = handle.shutdown_notify();
+            tokio::select! {
+                _ = tokio::signal::ctrl_c() => {}
+                _ = stop.notified() => { tracing::info!("shutdown requested via IPC"); }
+            }
             tracing::info!("servicio daemon shutting down");
             handle.shutdown().await;
             println!("stopped");

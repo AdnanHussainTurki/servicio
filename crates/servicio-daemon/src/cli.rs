@@ -49,4 +49,6 @@ pub enum Command {
     UninstallService,
     /// Show whether the login service is installed.
     ServiceStatus,
+    /// Print this binary's build id (used by the GUI to detect a stale daemon).
+    BuildId,
 }

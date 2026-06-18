@@ -23,7 +23,9 @@ pub struct Daemon {
     pub db: Mutex<Db>,
     pub started: std::time::Instant,
     pub version: String,
+    pub build: String,
     pub log_path: std::path::PathBuf,
+    pub shutdown: Arc<tokio::sync::Notify>,
 }
 
 /// Handle to a running server; used to stop it.
@@ -32,9 +34,16 @@ pub struct ServeHandle {
     accept_task: JoinHandle<()>,
     socket_path: std::path::PathBuf,
     daemon: Arc<Daemon>,
+    shutdown: Arc<tokio::sync::Notify>,
 }
 
 impl ServeHandle {
+    /// A clone of the daemon's shutdown notifier; fires when a `shutdown` IPC
+    /// is received so the host process can exit gracefully.
+    pub fn shutdown_notify(&self) -> Arc<tokio::sync::Notify> {
+        Arc::clone(&self.shutdown)
+    }
+
     pub async fn shutdown(self) {
         let _ = self.shutdown_tx.send(true);
         let _ = self.accept_task.await;
@@ -59,13 +68,16 @@ pub async fn serve(paths: Paths, token: String) -> std::io::Result<ServeHandle> 
         manager.start_worker(spec).await;
     }
 
+    let shutdown = Arc::new(tokio::sync::Notify::new());
     let daemon = Arc::new(Daemon {
         token,
         manager: Mutex::new(manager),
         db: Mutex::new(db),
         started: std::time::Instant::now(),
         version: env!("CARGO_PKG_VERSION").to_string(),
+        build: env!("SERVICIO_BUILD").to_string(),
         log_path: paths.base.join("daemon.log"),
+        shutdown: Arc::clone(&shutdown),
     });
 
     {
@@ -76,7 +88,7 @@ pub async fn serve(paths: Paths, token: String) -> std::io::Result<ServeHandle> 
     let (shutdown_tx, shutdown_rx) = watch::channel(false);
     let socket_path = paths.socket();
     let accept_task = tokio::spawn(accept_loop(listener, Arc::clone(&daemon), shutdown_rx));
-    Ok(ServeHandle { shutdown_tx, accept_task, socket_path, daemon })
+    Ok(ServeHandle { shutdown_tx, accept_task, socket_path, daemon, shutdown })
 }
 
 async fn accept_loop(
@@ -221,6 +233,7 @@ async fn dispatch(daemon: &Arc<Daemon>, id: u64, method: &str, params: serde_jso
                 id,
                 json!({
                     "version": daemon.version,
+                    "build": daemon.build,
                     "uptime_secs": daemon.started.elapsed().as_secs(),
                     "worker_count": worker_count,
                     "running_count": running_count,
@@ -385,6 +398,10 @@ async fn dispatch(daemon: &Arc<Daemon>, id: u64, method: &str, params: serde_jso
                 Ok(None) => Frame::err(id, "not_found", &format!("no worker '{name}'")),
                 Err(e) => Frame::err(id, "db_error", &e.to_string()),
             }
+        }
+        "shutdown" => {
+            daemon.shutdown.notify_one();
+            Frame::ok(id, serde_json::json!({"shutting_down": true}))
         }
         other => Frame::err(id, "unknown_method", &format!("no such method: {other}")),
     }
