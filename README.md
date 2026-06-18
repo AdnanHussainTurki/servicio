@@ -16,7 +16,18 @@ full design.
   Laravel/Python/Node/Procfile/Crontab/Generic); GUI detect→4-step wizard
   (Command→Mode→Recovery→Review), live metrics graphs, and native crash/recovery notifications.
   CLI: `servicio detect <path>`, `servicio metrics <name>`.
-- **Next:** OS-service install + run-on-boot; code signing / universal builds (packaging phase).
+- **Phase 3 (in progress):** OS-service install (login-start daemon) — done; universal build +
+  updater + signing — next.
+
+### Always-on (install as a login service)
+
+```bash
+cargo run -p servicio-daemon -- install-service     # launchd (macOS) / systemd --user (Linux)
+cargo run -p servicio-daemon -- service-status
+cargo run -p servicio-daemon -- uninstall-service
+```
+The daemon then starts at login and keeps your `autostart` workers running across reboots
+(macOS user LaunchAgent / Linux systemd user unit — no sudo).
 
 ### Run the GUI (dev)
 
