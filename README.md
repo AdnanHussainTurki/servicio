@@ -8,8 +8,8 @@
 
 Keep Laravel queues, Python workers, Node scripts — *any* command — alive, restarted on crash, scheduled on cron, and streaming their logs and metrics, all from a calm control-room GUI.
 
-[![CI](https://github.com/OWNER/servicio/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/servicio/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/OWNER/servicio?sort=semver)](https://github.com/OWNER/servicio/releases)
+[![CI](https://github.com/AdnanHussainTurki/servicio/actions/workflows/ci.yml/badge.svg)](https://github.com/AdnanHussainTurki/servicio/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/AdnanHussainTurki/servicio?sort=semver)](https://github.com/AdnanHussainTurki/servicio/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Built with Tauri](https://img.shields.io/badge/built%20with-Tauri%202-24C8DB.svg)](https://tauri.app)
 [![Rust](https://img.shields.io/badge/Rust-2021-orange.svg)](https://www.rust-lang.org)
@@ -22,7 +22,7 @@ Keep Laravel queues, Python workers, Node scripts — *any* command — alive, r
 
 </div>
 
-> **Note** — replace `OWNER` in the badge/links above with your GitHub user/org after you push.
+> **Note** — replace `AdnanHussainTurki` in the badge/links above with your GitHub user/org after you push.
 
 ---
 
@@ -93,7 +93,7 @@ The **daemon** runs headless as a login-start user service; the **GUI** auto-spa
 
 ### macOS
 
-1. Download `servicio_<version>_universal.dmg` from the [latest release](https://github.com/OWNER/servicio/releases).
+1. Download `servicio_<version>_universal.dmg` from the [latest release](https://github.com/AdnanHussainTurki/servicio/releases).
 2. Open the `.dmg` and drag **Servicio** to Applications.
 3. First launch: because the build is currently **unsigned**, right-click → **Open** (or run `xattr -dr com.apple.quarantine /Applications/servicio.app`).
 
@@ -112,7 +112,7 @@ On the roadmap — the engine is cross-platform; the Windows service wrapper is 
 **Prerequisites:** [Rust](https://rustup.rs) (stable), [Node 20+](https://nodejs.org), and the [Tauri prerequisites](https://tauri.app/start/prerequisites/) for your OS (Xcode CLT on macOS; `webkit2gtk` + friends on Linux).
 
 ```bash
-git clone https://github.com/OWNER/servicio.git
+git clone https://github.com/AdnanHussainTurki/servicio.git
 cd servicio
 
 # 1. Engine + CLI + daemon (Rust workspace)
@@ -187,8 +187,8 @@ Then fork → branch → open a PR against `main`. CI must be green.
 Thanks goes to these wonderful people:
 
 <!-- Add contributors here, e.g. via https://allcontributors.org -->
-<a href="https://github.com/OWNER/servicio/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=OWNER/servicio" alt="Contributors" />
+<a href="https://github.com/AdnanHussainTurki/servicio/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=AdnanHussainTurki/servicio" alt="Contributors" />
 </a>
 
 *Be the first — your PR puts you here.*
