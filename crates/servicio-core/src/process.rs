@@ -14,7 +14,9 @@ pub struct Spawned {
 
 impl std::fmt::Debug for Spawned {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Spawned").field("pid", &self.child.id()).finish_non_exhaustive()
+        f.debug_struct("Spawned")
+            .field("pid", &self.child.id())
+            .finish_non_exhaustive()
     }
 }
 
@@ -50,7 +52,9 @@ pub struct TokioProcess;
 impl ProcessSpawner for TokioProcess {
     fn spawn(&self, spec: &WorkerSpec) -> Result<Spawned, CoreError> {
         if !spec.working_dir.exists() {
-            return Err(CoreError::MissingWorkingDir(spec.working_dir.display().to_string()));
+            return Err(CoreError::MissingWorkingDir(
+                spec.working_dir.display().to_string(),
+            ));
         }
         let mut cmd = Command::new(&spec.command);
         cmd.args(&spec.args)
@@ -58,15 +62,28 @@ impl ProcessSpawner for TokioProcess {
             // Inherit the daemon env (PATH/HOME propagate to children), then overlay the
             // worker's own vars. Augment PATH so project-local + Homebrew/nvm tools resolve
             // even when the daemon was launched with a minimal PATH (e.g. from Finder).
-            .env("PATH", augmented_path(&spec.working_dir, spec.env.get("PATH")))
+            .env(
+                "PATH",
+                augmented_path(&spec.working_dir, spec.env.get("PATH")),
+            )
             .envs(&spec.env)
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .kill_on_drop(true);
         let mut child = cmd.spawn().map_err(|e| CoreError::Spawn(e.to_string()))?;
-        let stdout = child.stdout.take().map(|s| Box::new(s) as Box<dyn AsyncRead + Unpin + Send>);
-        let stderr = child.stderr.take().map(|s| Box::new(s) as Box<dyn AsyncRead + Unpin + Send>);
-        Ok(Spawned { child, stdout, stderr })
+        let stdout = child
+            .stdout
+            .take()
+            .map(|s| Box::new(s) as Box<dyn AsyncRead + Unpin + Send>);
+        let stderr = child
+            .stderr
+            .take()
+            .map(|s| Box::new(s) as Box<dyn AsyncRead + Unpin + Send>);
+        Ok(Spawned {
+            child,
+            stdout,
+            stderr,
+        })
     }
 }
 
@@ -80,7 +97,12 @@ fn augmented_path(working_dir: &Path, user_path: Option<&String>) -> String {
     let mut parts: Vec<String> = Vec::new();
     parts.push(working_dir.join("node_modules/.bin").display().to_string());
     parts.push(working_dir.join("vendor/bin").display().to_string());
-    for d in ["/opt/homebrew/bin", "/opt/homebrew/sbin", "/usr/local/bin", "/usr/local/sbin"] {
+    for d in [
+        "/opt/homebrew/bin",
+        "/opt/homebrew/sbin",
+        "/usr/local/bin",
+        "/usr/local/sbin",
+    ] {
         parts.push(d.to_string());
     }
     if let Some(home) = std::env::var_os("HOME") {
@@ -153,18 +175,33 @@ mod tests {
         let tool = bin.join("mytool");
         std::fs::write(&tool, "#!/bin/sh\necho ok\n").unwrap();
         #[cfg(unix)]
-        { use std::os::unix::fs::PermissionsExt; std::fs::set_permissions(&tool, std::fs::Permissions::from_mode(0o755)).unwrap(); }
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&tool, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
         let spec = WorkerSpec {
-            name: "t".into(), command: "mytool".into(), args: vec![],
-            working_dir: dir.path().to_path_buf(), env: std::collections::BTreeMap::new(),
+            name: "t".into(),
+            command: "mytool".into(),
+            args: vec![],
+            working_dir: dir.path().to_path_buf(),
+            env: std::collections::BTreeMap::new(),
             run_mode: crate::worker::RunMode::Daemon { concurrency: 1 },
-            restart: crate::worker::RestartPolicy::default(), autostart: false, enabled: true,
-            group: None, tags: vec![], display_name: None,
+            restart: crate::worker::RestartPolicy::default(),
+            autostart: false,
+            enabled: true,
+            group: None,
+            tags: vec![],
+            display_name: None,
         };
         let mut sp = TokioProcess.spawn(&spec).unwrap();
         let mut out = String::new();
         use tokio::io::AsyncReadExt;
-        sp.stdout.take().unwrap().read_to_string(&mut out).await.unwrap();
+        sp.stdout
+            .take()
+            .unwrap()
+            .read_to_string(&mut out)
+            .await
+            .unwrap();
         assert!(out.contains("ok"), "got: {out}");
     }
 
@@ -173,6 +210,9 @@ mod tests {
         let p = augmented_path(std::path::Path::new("/proj"), None);
         assert!(p.contains("/proj/node_modules/.bin"));
         assert!(p.contains("/opt/homebrew/bin"));
-        assert_eq!(augmented_path(std::path::Path::new("/proj"), Some(&"/custom".to_string())), "/custom");
+        assert_eq!(
+            augmented_path(std::path::Path::new("/proj"), Some(&"/custom".to_string())),
+            "/custom"
+        );
     }
 }

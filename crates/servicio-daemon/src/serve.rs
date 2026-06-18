@@ -1,12 +1,14 @@
 use crate::db::Db;
 use crate::paths::Paths;
+use serde_json::json;
 use servicio_core::event::SupervisorEvent;
 use servicio_core::manager::Manager;
 use servicio_core::process::TokioProcess;
 use servicio_core::worker::WorkerSpec;
-use servicio_ipc::types::{InstanceStatus as IpcInstanceStatus, LogEvent, StateEvent, WorkerStatus};
+use servicio_ipc::types::{
+    InstanceStatus as IpcInstanceStatus, LogEvent, StateEvent, WorkerStatus,
+};
 use servicio_ipc::Frame;
-use serde_json::json;
 use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{UnixListener, UnixStream};
@@ -82,13 +84,21 @@ pub async fn serve(paths: Paths, token: String) -> std::io::Result<ServeHandle> 
 
     {
         let d = Arc::clone(&daemon);
-        tokio::spawn(async move { crate::sampler::run_sampler_for(d, 3600).await; });
+        tokio::spawn(async move {
+            crate::sampler::run_sampler_for(d, 3600).await;
+        });
     }
 
     let (shutdown_tx, shutdown_rx) = watch::channel(false);
     let socket_path = paths.socket();
     let accept_task = tokio::spawn(accept_loop(listener, Arc::clone(&daemon), shutdown_rx));
-    Ok(ServeHandle { shutdown_tx, accept_task, socket_path, daemon, shutdown })
+    Ok(ServeHandle {
+        shutdown_tx,
+        accept_task,
+        socket_path,
+        daemon,
+        shutdown,
+    })
 }
 
 async fn accept_loop(
@@ -127,17 +137,25 @@ async fn handle_conn(stream: UnixStream, daemon: Arc<Daemon>) {
             Ok(f) => f,
             Err(_) => continue,
         };
-        let Frame::Request { id, method, params } = frame else { continue };
+        let Frame::Request { id, method, params } = frame else {
+            continue;
+        };
 
         if !authed {
             if method == "hello"
                 && params.get("token").and_then(|t| t.as_str()) == Some(daemon.token.as_str())
             {
                 authed = true;
-                let _ = write_frame_locked(&wr, &Frame::ok(id, json!({"daemon_version": daemon.version}))).await;
+                let _ = write_frame_locked(
+                    &wr,
+                    &Frame::ok(id, json!({"daemon_version": daemon.version})),
+                )
+                .await;
                 continue;
             }
-            let _ = write_frame_locked(&wr, &Frame::err(id, "unauthorized", "valid hello required")).await;
+            let _ =
+                write_frame_locked(&wr, &Frame::err(id, "unauthorized", "valid hello required"))
+                    .await;
             return;
         }
 
@@ -145,9 +163,16 @@ async fn handle_conn(stream: UnixStream, daemon: Arc<Daemon>) {
             let topics: Vec<String> = params
                 .get("topics")
                 .and_then(|t| t.as_array())
-                .map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect())
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|x| x.as_str().map(String::from))
+                        .collect()
+                })
                 .unwrap_or_default();
-            let worker_filter = params.get("worker").and_then(|w| w.as_str()).map(String::from);
+            let worker_filter = params
+                .get("worker")
+                .and_then(|w| w.as_str())
+                .map(String::from);
             let rx = daemon.manager.lock().await.subscribe();
             let _ = write_frame_locked(&wr, &Frame::ok(id, json!({"subscribed": true}))).await;
             spawn_forwarder(Arc::clone(&wr), rx, topics, worker_filter);
@@ -172,36 +197,96 @@ fn spawn_forwarder(
             match rx.recv().await {
                 Ok(ev) => {
                     let frame = match ev {
-                        SupervisorEvent::State { worker, instance, from, to } => {
-                            if !topics.iter().any(|t| t == "state") { continue; }
-                            if let Some(f) = &worker_filter { if f != &worker { continue; } }
+                        SupervisorEvent::State {
+                            worker,
+                            instance,
+                            from,
+                            to,
+                        } => {
+                            if !topics.iter().any(|t| t == "state") {
+                                continue;
+                            }
+                            if let Some(f) = &worker_filter {
+                                if f != &worker {
+                                    continue;
+                                }
+                            }
                             Frame::Event {
                                 topic: "state".into(),
-                                payload: serde_json::to_value(StateEvent { worker, instance, from, to }).unwrap(),
+                                payload: serde_json::to_value(StateEvent {
+                                    worker,
+                                    instance,
+                                    from,
+                                    to,
+                                })
+                                .unwrap(),
                             }
                         }
-                        SupervisorEvent::Log { worker, instance, stream, line } => {
-                            if !topics.iter().any(|t| t == "log") { continue; }
-                            if let Some(f) = &worker_filter { if f != &worker { continue; } }
+                        SupervisorEvent::Log {
+                            worker,
+                            instance,
+                            stream,
+                            line,
+                        } => {
+                            if !topics.iter().any(|t| t == "log") {
+                                continue;
+                            }
+                            if let Some(f) = &worker_filter {
+                                if f != &worker {
+                                    continue;
+                                }
+                            }
                             Frame::Event {
                                 topic: "log".into(),
-                                payload: serde_json::to_value(LogEvent { worker, instance, stream, line }).unwrap(),
+                                payload: serde_json::to_value(LogEvent {
+                                    worker,
+                                    instance,
+                                    stream,
+                                    line,
+                                })
+                                .unwrap(),
                             }
                         }
-                        SupervisorEvent::Metric { worker, instance, ts, cpu, mem } => {
-                            if !topics.iter().any(|t| t == "metric") { continue; }
-                            if let Some(f) = &worker_filter { if f != &worker { continue; } }
+                        SupervisorEvent::Metric {
+                            worker,
+                            instance,
+                            ts,
+                            cpu,
+                            mem,
+                        } => {
+                            if !topics.iter().any(|t| t == "metric") {
+                                continue;
+                            }
+                            if let Some(f) = &worker_filter {
+                                if f != &worker {
+                                    continue;
+                                }
+                            }
                             Frame::Event {
                                 topic: "metric".into(),
-                                payload: serde_json::to_value(servicio_ipc::types::MetricEvent { worker, instance, ts, cpu, mem }).unwrap(),
+                                payload: serde_json::to_value(servicio_ipc::types::MetricEvent {
+                                    worker,
+                                    instance,
+                                    ts,
+                                    cpu,
+                                    mem,
+                                })
+                                .unwrap(),
                             }
                         }
                     };
-                    if write_frame_locked(&wr, &frame).await.is_err() { break; }
+                    if write_frame_locked(&wr, &frame).await.is_err() {
+                        break;
+                    }
                 }
                 Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
-                    let frame = Frame::Event { topic: "lagged".into(), payload: json!({"dropped": n}) };
-                    if write_frame_locked(&wr, &frame).await.is_err() { break; }
+                    let frame = Frame::Event {
+                        topic: "lagged".into(),
+                        payload: json!({"dropped": n}),
+                    };
+                    if write_frame_locked(&wr, &frame).await.is_err() {
+                        break;
+                    }
                 }
                 Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
             }
@@ -214,7 +299,9 @@ async fn write_frame_locked(
     frame: &Frame,
 ) -> std::io::Result<()> {
     let mut guard = wr.lock().await;
-    guard.write_all(format!("{}\n", frame.to_line()).as_bytes()).await
+    guard
+        .write_all(format!("{}\n", frame.to_line()).as_bytes())
+        .await
 }
 
 /// Method dispatch for authenticated connections. Extended in Task 6/7.
@@ -227,7 +314,11 @@ async fn dispatch(daemon: &Arc<Daemon>, id: u64, method: &str, params: serde_jso
             let worker_count = status.len() as u32;
             let running_count = status
                 .iter()
-                .filter(|w| w.instances.iter().any(|i| matches!(i.state, servicio_core::state::InstanceState::Running)))
+                .filter(|w| {
+                    w.instances
+                        .iter()
+                        .any(|i| matches!(i.state, servicio_core::state::InstanceState::Running))
+                })
                 .count() as u32;
             Frame::ok(
                 id,
@@ -287,8 +378,12 @@ async fn dispatch(daemon: &Arc<Daemon>, id: u64, method: &str, params: serde_jso
             }
         }
         "add_worker" => {
-            let spec: Result<WorkerSpec, _> =
-                serde_json::from_value(params.get("spec").cloned().unwrap_or(serde_json::Value::Null));
+            let spec: Result<WorkerSpec, _> = serde_json::from_value(
+                params
+                    .get("spec")
+                    .cloned()
+                    .unwrap_or(serde_json::Value::Null),
+            );
             match spec {
                 Ok(spec) => {
                     let name = spec.name.clone();
@@ -308,7 +403,11 @@ async fn dispatch(daemon: &Arc<Daemon>, id: u64, method: &str, params: serde_jso
             }
         }
         "remove_worker" => {
-            let name = params.get("name").and_then(|n| n.as_str()).unwrap_or("").to_string();
+            let name = params
+                .get("name")
+                .and_then(|n| n.as_str())
+                .unwrap_or("")
+                .to_string();
             {
                 let mut mgr = daemon.manager.lock().await;
                 mgr.stop_worker(&name).await;
@@ -326,7 +425,11 @@ async fn dispatch(daemon: &Arc<Daemon>, id: u64, method: &str, params: serde_jso
             }
         }
         "start_worker" => {
-            let name = params.get("name").and_then(|n| n.as_str()).unwrap_or("").to_string();
+            let name = params
+                .get("name")
+                .and_then(|n| n.as_str())
+                .unwrap_or("")
+                .to_string();
             let db = daemon.db.lock().await;
             let spec = db.get_worker(&name);
             drop(db);
@@ -348,27 +451,56 @@ async fn dispatch(daemon: &Arc<Daemon>, id: u64, method: &str, params: serde_jso
             }
         }
         "stop_worker" => {
-            let name = params.get("name").and_then(|n| n.as_str()).unwrap_or("").to_string();
+            let name = params
+                .get("name")
+                .and_then(|n| n.as_str())
+                .unwrap_or("")
+                .to_string();
             let mut mgr = daemon.manager.lock().await;
             let stopped = mgr.stop_worker(&name).await;
             tracing::info!("stop_worker '{name}' (stopped={stopped})");
             Frame::ok(id, json!({"stopped": stopped}))
         }
         "metrics" => {
-            let name = params.get("worker").and_then(|n| n.as_str()).unwrap_or("").to_string();
-            let since = params.get("since_secs").and_then(|n| n.as_u64()).unwrap_or(0);
-            let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
-            let floor = if since == 0 { 0 } else { now.saturating_sub(since) };
+            let name = params
+                .get("worker")
+                .and_then(|n| n.as_str())
+                .unwrap_or("")
+                .to_string();
+            let since = params
+                .get("since_secs")
+                .and_then(|n| n.as_u64())
+                .unwrap_or(0);
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .unwrap_or(0);
+            let floor = if since == 0 {
+                0
+            } else {
+                now.saturating_sub(since)
+            };
             let db = daemon.db.lock().await;
             match db.query_metrics(&name, floor) {
                 Ok(rows) => {
-                    let series: Vec<servicio_ipc::types::MetricSeries> = rows.into_iter().map(|(instance, pts)| {
-                        servicio_ipc::types::MetricSeries {
+                    let series: Vec<servicio_ipc::types::MetricSeries> = rows
+                        .into_iter()
+                        .map(|(instance, pts)| servicio_ipc::types::MetricSeries {
                             instance,
-                            points: pts.into_iter().map(|(ts,cpu,mem)| servicio_ipc::types::MetricPoint { ts, cpu, mem }).collect(),
-                        }
-                    }).collect();
-                    match serde_json::to_value(series) { Ok(v) => Frame::ok(id, v), Err(e) => Frame::err(id, "internal", &e.to_string()) }
+                            points: pts
+                                .into_iter()
+                                .map(|(ts, cpu, mem)| servicio_ipc::types::MetricPoint {
+                                    ts,
+                                    cpu,
+                                    mem,
+                                })
+                                .collect(),
+                        })
+                        .collect();
+                    match serde_json::to_value(series) {
+                        Ok(v) => Frame::ok(id, v),
+                        Err(e) => Frame::err(id, "internal", &e.to_string()),
+                    }
                 }
                 Err(e) => Frame::err(id, "db_error", &e.to_string()),
             }
@@ -411,16 +543,23 @@ async fn dispatch(daemon: &Arc<Daemon>, id: u64, method: &str, params: serde_jso
             let specs: Vec<servicio_core::worker::WorkerSpec> = {
                 let db = daemon.db.lock().await;
                 match db.list_workers() {
-                    Ok(all) => all.into_iter().filter(|s| {
-                        match &s.group { Some(g) => g == group, None => want_none }
-                    }).collect(),
+                    Ok(all) => all
+                        .into_iter()
+                        .filter(|s| match &s.group {
+                            Some(g) => g == group,
+                            None => want_none,
+                        })
+                        .collect(),
                     Err(e) => return Frame::err(id, "db_error", &e.to_string()),
                 }
             };
             let mut started = 0u32;
             {
                 let mut mgr = daemon.manager.lock().await;
-                for spec in specs { mgr.start_worker(spec).await; started += 1; }
+                for spec in specs {
+                    mgr.start_worker(spec).await;
+                    started += 1;
+                }
             }
             tracing::info!("start_group '{group}' ({started})");
             Frame::ok(id, json!({"started": started}))
@@ -431,14 +570,25 @@ async fn dispatch(daemon: &Arc<Daemon>, id: u64, method: &str, params: serde_jso
             let names: Vec<String> = {
                 let db = daemon.db.lock().await;
                 match db.list_workers() {
-                    Ok(all) => all.into_iter().filter(|s| match &s.group { Some(g) => g == group, None => want_none }).map(|s| s.name).collect(),
+                    Ok(all) => all
+                        .into_iter()
+                        .filter(|s| match &s.group {
+                            Some(g) => g == group,
+                            None => want_none,
+                        })
+                        .map(|s| s.name)
+                        .collect(),
                     Err(e) => return Frame::err(id, "db_error", &e.to_string()),
                 }
             };
             let mut stopped = 0u32;
             {
                 let mut mgr = daemon.manager.lock().await;
-                for name in names { if mgr.stop_worker(&name).await { stopped += 1; } }
+                for name in names {
+                    if mgr.stop_worker(&name).await {
+                        stopped += 1;
+                    }
+                }
             }
             tracing::info!("stop_group '{group}' ({stopped})");
             Frame::ok(id, json!({"stopped": stopped}))
@@ -454,14 +604,20 @@ async fn dispatch(daemon: &Arc<Daemon>, id: u64, method: &str, params: serde_jso
             }
         }
         "import_workers" => {
-            let specs: Result<Vec<servicio_core::worker::WorkerSpec>, _> =
-                serde_json::from_value(params.get("workers").cloned().unwrap_or(serde_json::Value::Null));
+            let specs: Result<Vec<servicio_core::worker::WorkerSpec>, _> = serde_json::from_value(
+                params
+                    .get("workers")
+                    .cloned()
+                    .unwrap_or(serde_json::Value::Null),
+            );
             match specs {
                 Ok(specs) => {
                     let db = daemon.db.lock().await;
                     let mut n = 0u32;
                     for s in &specs {
-                        if db.upsert_worker(s).is_ok() { n += 1; }
+                        if db.upsert_worker(s).is_ok() {
+                            n += 1;
+                        }
                     }
                     tracing::info!("import_workers ({n})");
                     Frame::ok(id, json!({ "imported": n }))
@@ -484,7 +640,11 @@ async fn read_line_capped(
     loop {
         let available = reader.fill_buf().await?;
         if available.is_empty() {
-            return if buf.is_empty() { Ok(None) } else { Ok(Some(())) };
+            return if buf.is_empty() {
+                Ok(None)
+            } else {
+                Ok(Some(()))
+            };
         }
         if let Some(pos) = available.iter().position(|&b| b == b'\n') {
             buf.extend_from_slice(&available[..pos]);
@@ -495,7 +655,10 @@ async fn read_line_capped(
         let n = available.len();
         reader.consume(n);
         if buf.len() > max {
-            return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "line too long"));
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "line too long",
+            ));
         }
     }
 }

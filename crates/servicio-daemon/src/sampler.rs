@@ -12,7 +12,10 @@ pub async fn run_sampler_for(daemon: Arc<Daemon>, retain_secs: u64) {
     loop {
         tokio::time::sleep(Duration::from_secs(2)).await;
         sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
-        let now = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
         let (snapshot, sender) = {
             let mgr = daemon.manager.lock().await;
             (mgr.status(), mgr.events_sender())
@@ -23,8 +26,17 @@ pub async fn run_sampler_for(daemon: Arc<Daemon>, retain_secs: u64) {
                     if let Some(p) = sys.process(Pid::from_u32(pid)) {
                         let cpu = p.cpu_usage();
                         let mem = p.memory();
-                        { let db = daemon.db.lock().await; let _ = db.insert_metric(&w.name, inst.index, now, cpu, mem); }
-                        let _ = sender.send(SupervisorEvent::Metric { worker: w.name.clone(), instance: inst.index, ts: now, cpu, mem });
+                        {
+                            let db = daemon.db.lock().await;
+                            let _ = db.insert_metric(&w.name, inst.index, now, cpu, mem);
+                        }
+                        let _ = sender.send(SupervisorEvent::Metric {
+                            worker: w.name.clone(),
+                            instance: inst.index,
+                            ts: now,
+                            cpu,
+                            mem,
+                        });
                     }
                 }
             }
@@ -32,7 +44,8 @@ pub async fn run_sampler_for(daemon: Arc<Daemon>, retain_secs: u64) {
         ticks += 1;
         if ticks % 30 == 0 {
             let cutoff = now.saturating_sub(retain_secs);
-            let db = daemon.db.lock().await; let _ = db.prune_metrics(cutoff);
+            let db = daemon.db.lock().await;
+            let _ = db.prune_metrics(cutoff);
         }
     }
 }

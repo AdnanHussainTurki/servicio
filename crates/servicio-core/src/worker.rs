@@ -2,7 +2,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-fn default_concurrency() -> u32 { 1 }
+fn default_concurrency() -> u32 {
+    1
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -39,7 +41,9 @@ pub enum RunMode {
     },
 }
 
-fn default_overlap() -> OverlapPolicy { OverlapPolicy::Skip }
+fn default_overlap() -> OverlapPolicy {
+    OverlapPolicy::Skip
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -61,7 +65,13 @@ pub struct RestartPolicy {
 
 impl Default for RestartPolicy {
     fn default() -> Self {
-        Self { kind: RestartKind::OnFailure, max_retries: 5, base_secs: 1, max_secs: 60, reset_window_secs: 30 }
+        Self {
+            kind: RestartKind::OnFailure,
+            max_retries: 5,
+            base_secs: 1,
+            max_secs: 60,
+            reset_window_secs: 30,
+        }
     }
 }
 
@@ -118,15 +128,23 @@ mod tests {
     #[test]
     fn worker_spec_group_tags_roundtrip() {
         let mut s = WorkerSpec {
-            name: "q".into(), command: "sh".into(), args: vec![],
-            working_dir: PathBuf::from("/"), env: BTreeMap::new(),
-            run_mode: RunMode::Daemon { concurrency: 1 }, restart: RestartPolicy::default(),
-            autostart: false, enabled: true, group: Some("app".into()), tags: vec!["redis".into(), "critical".into()],
+            name: "q".into(),
+            command: "sh".into(),
+            args: vec![],
+            working_dir: PathBuf::from("/"),
+            env: BTreeMap::new(),
+            run_mode: RunMode::Daemon { concurrency: 1 },
+            restart: RestartPolicy::default(),
+            autostart: false,
+            enabled: true,
+            group: Some("app".into()),
+            tags: vec!["redis".into(), "critical".into()],
             display_name: None,
         };
         let back: WorkerSpec = serde_json::from_str(&serde_json::to_string(&s).unwrap()).unwrap();
         assert_eq!(s, back);
-        s.group = None; s.tags = vec![];
+        s.group = None;
+        s.tags = vec![];
         // back-compat: JSON without group/tags fields loads to defaults
         let old = r#"{"name":"q","command":"sh","args":[],"working_dir":"/","env":{},"run_mode":{"type":"daemon","concurrency":1},"restart":{"kind":"on_failure","max_retries":5,"base_secs":1,"max_secs":60,"reset_window_secs":30},"autostart":false,"enabled":true}"#;
         let loaded: WorkerSpec = serde_json::from_str(old).unwrap();
@@ -137,10 +155,17 @@ mod tests {
     #[test]
     fn worker_spec_display_name_roundtrip() {
         let s = WorkerSpec {
-            name: "q".into(), command: "sh".into(), args: vec![],
-            working_dir: PathBuf::from("/"), env: BTreeMap::new(),
-            run_mode: RunMode::Daemon { concurrency: 1 }, restart: RestartPolicy::default(),
-            autostart: false, enabled: true, group: None, tags: vec![],
+            name: "q".into(),
+            command: "sh".into(),
+            args: vec![],
+            working_dir: PathBuf::from("/"),
+            env: BTreeMap::new(),
+            run_mode: RunMode::Daemon { concurrency: 1 },
+            restart: RestartPolicy::default(),
+            autostart: false,
+            enabled: true,
+            group: None,
+            tags: vec![],
             display_name: Some("Queue Worker".into()),
         };
         let back: WorkerSpec = serde_json::from_str(&serde_json::to_string(&s).unwrap()).unwrap();
@@ -177,7 +202,10 @@ mod tests {
 
     #[test]
     fn batch_mode_roundtrips() {
-        let m = RunMode::Batch { run_count: 5, delay_secs: 10 };
+        let m = RunMode::Batch {
+            run_count: 5,
+            delay_secs: 10,
+        };
         let back: RunMode = serde_json::from_str(&serde_json::to_string(&m).unwrap()).unwrap();
         assert_eq!(m, back);
     }

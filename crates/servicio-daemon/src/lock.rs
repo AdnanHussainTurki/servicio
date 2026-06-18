@@ -40,7 +40,10 @@ mod tests {
         let path = dir.path().join("daemon.lock");
         let first = InstanceLock::acquire(&path).expect("first lock");
         let second = InstanceLock::acquire(&path);
-        assert!(second.is_err(), "second acquire must fail while first is held");
+        assert!(
+            second.is_err(),
+            "second acquire must fail while first is held"
+        );
         drop(first);
         let third = InstanceLock::acquire(&path);
         assert!(third.is_ok());

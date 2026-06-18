@@ -58,16 +58,28 @@ async fn main() -> Result<()> {
         .trim()
         .to_string();
 
-    let mut client = Client::connect(&socket, &token).await.context("connecting to daemon")?;
+    let mut client = Client::connect(&socket, &token)
+        .await
+        .context("connecting to daemon")?;
 
     match cli.command {
         Command::Ps => {
             let workers = client.list_workers().await?;
             println!("{:<20} {:<22} {:<10} RESTARTS", "NAME", "MODE", "STATE");
             for w in workers {
-                let state = w.instances.first().map(|i| format!("{:?}", i.state)).unwrap_or_else(|| "-".into());
+                let state = w
+                    .instances
+                    .first()
+                    .map(|i| format!("{:?}", i.state))
+                    .unwrap_or_else(|| "-".into());
                 let restarts: u32 = w.instances.iter().map(|i| i.restart_count).sum();
-                println!("{:<20} {:<22} {:<10} {}", w.name, format!("{:?}", w.run_mode), state, restarts);
+                println!(
+                    "{:<20} {:<22} {:<10} {}",
+                    w.name,
+                    format!("{:?}", w.run_mode),
+                    state,
+                    restarts
+                );
             }
         }
         Command::Info => {

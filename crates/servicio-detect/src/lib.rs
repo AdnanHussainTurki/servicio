@@ -4,16 +4,18 @@ use serde::{Deserialize, Serialize};
 use servicio_core::worker::RunMode;
 use std::path::{Path, PathBuf};
 
+mod crontab;
 mod laravel;
-mod python;
 mod node;
 mod procfile;
-mod crontab;
+mod python;
 mod tasks;
 
 /// Folder name of `root`, used as the default suggestion group.
 pub fn folder_group(root: &std::path::Path) -> Option<String> {
-    root.file_name().and_then(|n| n.to_str()).map(|s| s.to_string())
+    root.file_name()
+        .and_then(|n| n.to_str())
+        .map(|s| s.to_string())
 }
 
 /// A proposed worker the user confirms/edits before it's created.
@@ -38,7 +40,9 @@ pub trait Detector {
 /// Always-present fallback so the wizard can start from scratch.
 pub struct Generic;
 impl Detector for Generic {
-    fn name(&self) -> &str { "generic" }
+    fn name(&self) -> &str {
+        "generic"
+    }
     fn detect(&self, root: &Path) -> Vec<SuggestionDraft> {
         vec![SuggestionDraft {
             label: "Custom worker".into(),
@@ -68,8 +72,12 @@ pub fn detect_all(root: &Path) -> Vec<SuggestionDraft> {
     let mut out: Vec<SuggestionDraft> = Vec::new();
     for d in &detectors {
         for s in d.detect(root) {
-            let dup = out.iter().any(|e| e.command == s.command && e.args == s.args && e.working_dir == s.working_dir);
-            if !dup { out.push(s); }
+            let dup = out.iter().any(|e| {
+                e.command == s.command && e.args == s.args && e.working_dir == s.working_dir
+            });
+            if !dup {
+                out.push(s);
+            }
         }
     }
     out
@@ -100,7 +108,10 @@ mod tests {
         std::fs::write(dir.path().join("requirements.txt"), "x").unwrap();
         let all = detect_all(dir.path());
         // python suggests `python ["worker.py"]`; procfile suggests `python ["worker.py"]` — must dedup to one.
-        let count = all.iter().filter(|s| s.command == "python" && s.args == vec!["worker.py".to_string()]).count();
+        let count = all
+            .iter()
+            .filter(|s| s.command == "python" && s.args == vec!["worker.py".to_string()])
+            .count();
         assert_eq!(count, 1);
     }
 }

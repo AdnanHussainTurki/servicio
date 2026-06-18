@@ -11,7 +11,12 @@ pub struct Backoff {
 
 impl Backoff {
     pub fn new(base: Duration, max: Duration, max_retries: u32, reset_window: Duration) -> Self {
-        Self { base, max, max_retries, reset_window }
+        Self {
+            base,
+            max,
+            max_retries,
+            reset_window,
+        }
     }
 
     /// Delay before retry `attempt` (1-based): base * 2^(attempt-1), capped at `max`.
@@ -40,7 +45,12 @@ mod tests {
     use super::*;
 
     fn b() -> Backoff {
-        Backoff::new(Duration::from_secs(1), Duration::from_secs(60), 5, Duration::from_secs(30))
+        Backoff::new(
+            Duration::from_secs(1),
+            Duration::from_secs(60),
+            5,
+            Duration::from_secs(30),
+        )
     }
 
     #[test]
@@ -65,7 +75,7 @@ mod tests {
     #[test]
     fn crash_loop_trips_after_max_retries() {
         assert!(!b().is_crash_loop(5)); // exactly at limit is still allowed
-        assert!(b().is_crash_loop(6));  // one past the limit trips
+        assert!(b().is_crash_loop(6)); // one past the limit trips
     }
 
     #[test]

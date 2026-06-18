@@ -50,11 +50,19 @@ pub fn systemd_unit(spec: &ServiceSpec) -> String {
 
 /// Filename for the unit in `dir` (platform-shaped).
 fn unit_filename(label: &str) -> String {
-    if cfg!(target_os = "macos") { format!("{label}.plist") } else { "servicio.service".to_string() }
+    if cfg!(target_os = "macos") {
+        format!("{label}.plist")
+    } else {
+        "servicio.service".to_string()
+    }
 }
 
 fn unit_body(spec: &ServiceSpec) -> String {
-    if cfg!(target_os = "macos") { launchd_plist(spec) } else { systemd_unit(spec) }
+    if cfg!(target_os = "macos") {
+        launchd_plist(spec)
+    } else {
+        systemd_unit(spec)
+    }
 }
 
 /// Write the unit file into `dir`. If `load`, invoke the platform loader.
@@ -62,14 +70,20 @@ pub fn install_to(spec: &ServiceSpec, dir: &Path, load: bool) -> io::Result<Path
     std::fs::create_dir_all(dir)?;
     let path = dir.join(unit_filename(&spec.label));
     std::fs::write(&path, unit_body(spec))?;
-    if load { run_loader(&path, &spec.label, true); }
+    if load {
+        run_loader(&path, &spec.label, true);
+    }
     Ok(path)
 }
 
 pub fn uninstall_from(dir: &Path, label: &str, load: bool) -> io::Result<()> {
     let path = dir.join(unit_filename(label));
-    if load { run_loader(&path, label, false); }
-    if path.exists() { std::fs::remove_file(&path)?; }
+    if load {
+        run_loader(&path, label, false);
+    }
+    if path.exists() {
+        std::fs::remove_file(&path)?;
+    }
     Ok(())
 }
 
@@ -83,34 +97,54 @@ fn run_loader(path: &Path, label: &str, enable: bool) {
     {
         let _ = label;
         let arg = if enable { "load" } else { "unload" };
-        let _ = std::process::Command::new("launchctl").arg(arg).arg("-w").arg(path).status();
+        let _ = std::process::Command::new("launchctl")
+            .arg(arg)
+            .arg("-w")
+            .arg(path)
+            .status();
     }
     #[cfg(target_os = "linux")]
     {
         let _ = path;
         let action = if enable { "enable" } else { "disable" };
-        let _ = std::process::Command::new("systemctl").arg("--user").arg(action).arg("--now").arg("servicio.service").status();
+        let _ = std::process::Command::new("systemctl")
+            .arg("--user")
+            .arg(action)
+            .arg("--now")
+            .arg("servicio.service")
+            .status();
         let _ = label;
     }
     #[cfg(not(any(target_os = "macos", target_os = "linux")))]
-    { let _ = (path, label, enable); }
+    {
+        let _ = (path, label, enable);
+    }
 }
 
 /// Default platform dir for the unit file.
 pub fn default_service_dir() -> Option<PathBuf> {
     #[cfg(target_os = "macos")]
-    { dirs_home().map(|h| h.join("Library/LaunchAgents")) }
+    {
+        dirs_home().map(|h| h.join("Library/LaunchAgents"))
+    }
     #[cfg(target_os = "linux")]
-    { dirs_config().map(|c| c.join("systemd/user")) }
+    {
+        dirs_config().map(|c| c.join("systemd/user"))
+    }
     #[cfg(not(any(target_os = "macos", target_os = "linux")))]
-    { None }
+    {
+        None
+    }
 }
 
 #[cfg(target_os = "macos")]
-fn dirs_home() -> Option<PathBuf> { std::env::var_os("HOME").map(PathBuf::from) }
+fn dirs_home() -> Option<PathBuf> {
+    std::env::var_os("HOME").map(PathBuf::from)
+}
 #[cfg(target_os = "linux")]
 fn dirs_config() -> Option<PathBuf> {
-    std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from)
+    std::env::var_os("XDG_CONFIG_HOME")
+        .map(PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))
 }
 
@@ -120,7 +154,11 @@ mod tests {
     use std::path::PathBuf;
 
     fn spec() -> ServiceSpec {
-        ServiceSpec { label: "com.servicio.daemon".into(), exe: PathBuf::from("/usr/local/bin/servicio-daemon"), base: PathBuf::from("/tmp/servicio") }
+        ServiceSpec {
+            label: "com.servicio.daemon".into(),
+            exe: PathBuf::from("/usr/local/bin/servicio-daemon"),
+            base: PathBuf::from("/tmp/servicio"),
+        }
     }
 
     #[test]

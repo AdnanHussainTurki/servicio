@@ -20,7 +20,13 @@ impl LogSink {
         }
         let file = OpenOptions::new().create(true).append(true).open(path)?;
         let written = file.metadata()?.len();
-        Ok(Self { path: path.to_path_buf(), file, written, max_bytes, max_files })
+        Ok(Self {
+            path: path.to_path_buf(),
+            file,
+            written,
+            max_bytes,
+            max_files,
+        })
     }
 
     /// Write one line tagged with instance index + stream name + a timestamp marker.
@@ -44,7 +50,10 @@ impl LogSink {
             }
         }
         std::fs::rename(&self.path, self.indexed(1))?;
-        self.file = OpenOptions::new().create(true).append(true).open(&self.path)?;
+        self.file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&self.path)?;
         self.written = 0;
         Ok(())
     }
@@ -67,7 +76,10 @@ mod tests {
         sink.write_line(2, "stdout", "processing job").unwrap();
 
         let mut contents = String::new();
-        File::open(&path).unwrap().read_to_string(&mut contents).unwrap();
+        File::open(&path)
+            .unwrap()
+            .read_to_string(&mut contents)
+            .unwrap();
         assert!(contents.contains("[#2]"));
         assert!(contents.contains("stdout"));
         assert!(contents.contains("processing job"));
@@ -79,7 +91,8 @@ mod tests {
         let path = dir.path().join("w.log");
         // tiny cap forces rotation after the first line.
         let mut sink = LogSink::new(&path, 10, 3).unwrap();
-        sink.write_line(1, "stdout", "first line is long enough").unwrap();
+        sink.write_line(1, "stdout", "first line is long enough")
+            .unwrap();
         sink.write_line(1, "stdout", "second").unwrap();
 
         // rotated file w.log.1 must now exist.
