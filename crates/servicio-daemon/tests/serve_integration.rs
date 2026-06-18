@@ -299,6 +299,24 @@ async fn daemon_log_method_returns_log_field() {
 }
 
 #[tokio::test]
+async fn get_worker_returns_full_spec() {
+    let dir = tempfile::tempdir().unwrap();
+    let paths = Paths::new(dir.path().to_path_buf());
+    let h = start(paths.clone(), "secret".into()).await;
+    let _ = hello_then(&paths.socket(), vec![
+        Frame::Request { id: 1, method: "add_worker".into(), params: json!({"spec": sleeper("q")}) },
+    ]).await;
+    let replies = hello_then(&paths.socket(), vec![
+        Frame::Request { id: 1, method: "get_worker".into(), params: json!({"name":"q"}) },
+    ]).await;
+    match &replies[1] {
+        Frame::Response { id: 1, result: Some(v), .. } => assert_eq!(v["name"], "q"),
+        other => panic!("unexpected: {other:?}"),
+    }
+    h.shutdown().await;
+}
+
+#[tokio::test]
 async fn detect_workers_finds_laravel_in_fixture() {
     let dir = tempfile::tempdir().unwrap();
     let paths = Paths::new(dir.path().to_path_buf());

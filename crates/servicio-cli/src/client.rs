@@ -71,6 +71,10 @@ impl Client {
         self.request("stop_worker", json!({ "name": name })).await.map(|_| ())
     }
 
+    pub async fn get_worker(&mut self, name: &str) -> Result<serde_json::Value> {
+        self.request("get_worker", json!({"name": name})).await
+    }
+
     pub async fn daemon_info(&mut self) -> Result<Value> {
         self.request("daemon_info", json!({})).await
     }

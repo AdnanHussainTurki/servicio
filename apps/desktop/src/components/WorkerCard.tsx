@@ -20,11 +20,13 @@ export function WorkerCard({
   onOpen,
   onStart,
   onStop,
+  onEdit,
 }: {
   w: WorkerStatus;
   onOpen: () => void;
   onStart: () => void;
   onStop: () => void;
+  onEdit?: () => void;
 }) {
   const state = worstState(w);
   const s = styleFor(state);
@@ -117,6 +119,16 @@ export function WorkerCard({
             onClick={onStop}
           >
             ■ stop
+          </button>
+          <button
+            className="rounded-md bg-signal-500/10 px-2.5 py-1.5 font-mono text-xs font-semibold
+              text-signal-700 ring-1 ring-inset ring-signal-500/25 transition hover:bg-signal-500/20
+              dark:text-signal-300"
+            onClick={() => onEdit?.()}
+            aria-label={`Edit ${w.name}`}
+            title="Edit worker"
+          >
+            ✎
           </button>
         </div>
       </div>

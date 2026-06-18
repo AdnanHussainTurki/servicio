@@ -374,6 +374,18 @@ async fn dispatch(daemon: &Arc<Daemon>, id: u64, method: &str, params: serde_jso
             let text: String = tail.into_iter().rev().collect::<Vec<_>>().join("\n");
             Frame::ok(id, serde_json::json!({ "log": text }))
         }
+        "get_worker" => {
+            let name = params.get("name").and_then(|n| n.as_str()).unwrap_or("");
+            let db = daemon.db.lock().await;
+            match db.get_worker(name) {
+                Ok(Some(spec)) => match serde_json::to_value(spec) {
+                    Ok(v) => Frame::ok(id, v),
+                    Err(e) => Frame::err(id, "internal", &e.to_string()),
+                },
+                Ok(None) => Frame::err(id, "not_found", &format!("no worker '{name}'")),
+                Err(e) => Frame::err(id, "db_error", &e.to_string()),
+            }
+        }
         other => Frame::err(id, "unknown_method", &format!("no such method: {other}")),
     }
 }

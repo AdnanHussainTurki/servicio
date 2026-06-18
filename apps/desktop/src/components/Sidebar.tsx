@@ -72,6 +72,12 @@ export function Sidebar({
           label="Dashboard"
         />
         <NavItem
+          active={view === "groups"}
+          onClick={() => setView("groups")}
+          icon="▤"
+          label="Groups"
+        />
+        <NavItem
           active={view === "settings"}
           onClick={() => setView("settings")}
           icon="⚙"

@@ -92,9 +92,11 @@ function TagFilterChip({
 function WorkerGrid({
   workers,
   onOpen,
+  onEditWorker,
 }: {
   workers: WorkerStatus[];
   onOpen: (name: string) => void;
+  onEditWorker: (name: string) => void;
 }) {
   return (
     <div className="grid auto-rows-min grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -105,6 +107,7 @@ function WorkerGrid({
             onOpen={() => onOpen(w.name)}
             onStart={() => withError(api.startWorker(w.name))}
             onStop={() => withError(api.stopWorker(w.name))}
+            onEdit={() => onEditWorker(w.name)}
           />
         </div>
       ))}
@@ -116,10 +119,12 @@ function GroupSection({
   name,
   workers,
   onOpen,
+  onEditWorker,
 }: {
   name: string;
   workers: WorkerStatus[];
   onOpen: (name: string) => void;
+  onEditWorker: (name: string) => void;
 }) {
   const [open, setOpen] = useState(true);
   return (
@@ -147,7 +152,7 @@ function GroupSection({
         </span>
         <span className="ml-1 h-px flex-1 bg-stone-200/70 dark:bg-white/[0.06]" aria-hidden />
       </button>
-      {open && <WorkerGrid workers={workers} onOpen={onOpen} />}
+      {open && <WorkerGrid workers={workers} onOpen={onOpen} onEditWorker={onEditWorker} />}
     </section>
   );
 }
@@ -155,9 +160,11 @@ function GroupSection({
 export function Dashboard({
   onOpen,
   onAdd,
+  onEditWorker,
 }: {
   onOpen: (name: string) => void;
   onAdd: () => void;
+  onEditWorker?: (name: string) => void;
 }) {
   const workers = Object.values(useStore((s) => s.workers));
   const [activeTags, setActiveTags] = useState<Set<string>>(new Set());
@@ -264,7 +271,7 @@ export function Dashboard({
               </p>
             ) : (
               sections.map(([name, list]) => (
-                <GroupSection key={name} name={name} workers={list} onOpen={onOpen} />
+                <GroupSection key={name} name={name} workers={list} onOpen={onOpen} onEditWorker={onEditWorker ?? (() => {})} />
               ))
             )}
           </div>

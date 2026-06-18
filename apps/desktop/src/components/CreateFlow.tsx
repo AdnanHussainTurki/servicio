@@ -3,6 +3,21 @@ import { api } from "../api";
 import type { AddWorkerSpec } from "../api";
 import type { SuggestionDraft, RunModeAny } from "../types";
 
+/** Full WorkerSpec shape returned by `api.getWorker`, used to prefill edit mode. */
+export interface EditSpec {
+  name: string;
+  command: string;
+  args: string[];
+  working_dir: string;
+  env: Record<string, string>;
+  run_mode: RunModeAny;
+  restart: { kind: string; max_retries: number; base_secs?: number; max_secs?: number; reset_window_secs?: number };
+  autostart: boolean;
+  enabled: boolean;
+  group?: string | null;
+  tags?: string[];
+}
+
 /* ── shared input styling, mirrored from AddWorkerForm ───────────────────── */
 const fieldCls =
   "w-full rounded-md border border-stone-300 bg-white px-3 py-2 font-mono text-sm text-stone-900 " +
@@ -67,11 +82,12 @@ function ModeChip({ type }: { type: RunModeAny["type"] }) {
 const STEPS = ["Detect", "Command", "Mode", "Recovery", "Review"] as const;
 type StepName = (typeof STEPS)[number];
 
-function StepRail({ active }: { active: number }) {
+function StepRail({ active, skipFirst }: { active: number; skipFirst?: boolean }) {
   return (
     <ol className="mb-7 flex items-center gap-0 select-none">
       {STEPS.map((label, i) => {
-        const done = i < active;
+        const skipped = skipFirst && i === 0;
+        const done = i < active && !skipped;
         const current = i === active;
         return (
           <li key={label} className="flex flex-1 items-center last:flex-none">
@@ -81,12 +97,14 @@ function StepRail({ active }: { active: number }) {
                   "flex h-7 w-7 shrink-0 items-center justify-center rounded-md font-mono text-xs font-semibold ring-1 ring-inset transition " +
                   (current
                     ? "bg-signal-500 text-white ring-signal-400 shadow-glow"
-                    : done
-                      ? "bg-signal-500/15 text-signal-600 ring-signal-500/30 dark:text-signal-400"
-                      : "bg-white/60 text-stone-400 ring-stone-300 dark:bg-white/[0.03] dark:text-stone-500 dark:ring-white/10")
+                    : skipped
+                      ? "bg-white/40 text-stone-300 ring-stone-200 dark:bg-white/[0.02] dark:text-stone-600 dark:ring-white/[0.06]"
+                      : done
+                        ? "bg-signal-500/15 text-signal-600 ring-signal-500/30 dark:text-signal-400"
+                        : "bg-white/60 text-stone-400 ring-stone-300 dark:bg-white/[0.03] dark:text-stone-500 dark:ring-white/10")
                 }
               >
-                {done ? "✓" : i + 1}
+                {skipped ? "–" : done ? "✓" : i + 1}
               </span>
               <span
                 className={
@@ -151,11 +169,17 @@ function ModeTabs({
 export function CreateFlow({
   onDone,
   onCancel,
+  editWorker,
 }: {
   onDone: () => void;
   onCancel: () => void;
+  editWorker?: EditSpec | null;
 }) {
-  const [step, setStep] = useState<StepName>("Detect");
+  const editing = !!editWorker;
+  const erm = editWorker?.run_mode;
+
+  // In edit mode we skip Detect and land directly on Command.
+  const [step, setStep] = useState<StepName>(editing ? "Command" : "Detect");
   const activeIdx = STEPS.indexOf(step);
 
   /* detect state */
@@ -165,30 +189,39 @@ export function CreateFlow({
   const [scanned, setScanned] = useState(false);
   const [suggestions, setSuggestions] = useState<SuggestionDraft[]>([]);
   const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [savedNote, setSavedNote] = useState(false);
 
   /* command step */
-  const [name, setName] = useState("");
-  const [command, setCommand] = useState("");
-  const [args, setArgs] = useState("");
-  const [dir, setDir] = useState(".");
+  const [name, setName] = useState(editWorker?.name ?? "");
+  const [command, setCommand] = useState(editWorker?.command ?? "");
+  const [args, setArgs] = useState(editWorker?.args.join(" ") ?? "");
+  const [dir, setDir] = useState(editWorker?.working_dir || ".");
 
   /* mode step */
-  const [mode, setMode] = useState<RunModeAny["type"]>("daemon");
-  const [concurrency, setConcurrency] = useState(1);
-  const [cronMode, setCronMode] = useState(true);
-  const [cron, setCron] = useState("*/5 * * * *");
-  const [intervalSecs, setIntervalSecs] = useState(60);
-  const [runCount, setRunCount] = useState(1);
-  const [delaySecs, setDelaySecs] = useState(0);
+  const [mode, setMode] = useState<RunModeAny["type"]>(erm?.type ?? "daemon");
+  const [concurrency, setConcurrency] = useState(
+    erm?.type === "daemon" ? erm.concurrency : 1,
+  );
+  const [cronMode, setCronMode] = useState(
+    erm?.type === "scheduled" ? "cron" in erm.schedule : true,
+  );
+  const [cron, setCron] = useState(
+    erm?.type === "scheduled" && "cron" in erm.schedule ? erm.schedule.cron : "*/5 * * * *",
+  );
+  const [intervalSecs, setIntervalSecs] = useState(
+    erm?.type === "scheduled" && "interval_secs" in erm.schedule ? erm.schedule.interval_secs : 60,
+  );
+  const [runCount, setRunCount] = useState(erm?.type === "batch" ? erm.run_count : 1);
+  const [delaySecs, setDelaySecs] = useState(erm?.type === "batch" ? erm.delay_secs : 0);
 
   /* recovery step */
-  const [restartKind, setRestartKind] = useState("on_failure");
-  const [maxRetries, setMaxRetries] = useState(5);
-  const [autostart, setAutostart] = useState(true);
+  const [restartKind, setRestartKind] = useState(editWorker?.restart.kind ?? "on_failure");
+  const [maxRetries, setMaxRetries] = useState(editWorker?.restart.max_retries ?? 5);
+  const [autostart, setAutostart] = useState(editWorker?.autostart ?? true);
 
   /* organization */
-  const [group, setGroup] = useState("");
-  const [tags, setTags] = useState("");
+  const [group, setGroup] = useState(editWorker?.group ?? "");
+  const [tags, setTags] = useState(editWorker?.tags?.join(", ") ?? "");
 
   const [saving, setSaving] = useState(false);
 
@@ -293,9 +326,9 @@ export function CreateFlow({
       restart: {
         kind: restartKind,
         max_retries: maxRetries,
-        base_secs: 1,
-        max_secs: 60,
-        reset_window_secs: 30,
+        base_secs: editWorker?.restart.base_secs ?? 1,
+        max_secs: editWorker?.restart.max_secs ?? 60,
+        reset_window_secs: editWorker?.restart.reset_window_secs ?? 30,
       },
       autostart,
       enabled: true,
@@ -309,7 +342,14 @@ export function CreateFlow({
     setSaving(true);
     try {
       await api.addWorker(buildSpec());
-      onDone();
+      if (editing) {
+        // Surface a transient note before handing control back to the caller —
+        // edits only take effect on the next worker restart.
+        setSavedNote(true);
+        setTimeout(onDone, 900);
+      } else {
+        onDone();
+      }
     } catch (err) {
       setScanError(String(err));
       setStep("Review");
@@ -327,10 +367,12 @@ export function CreateFlow({
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
           <h2 className="font-display text-2xl font-bold tracking-tight text-stone-900 dark:text-stone-50">
-            New worker
+            {editing ? "Edit worker" : "New worker"}
           </h2>
           <p className="mt-1 text-sm text-stone-500 dark:text-stone-400">
-            Detect candidates in a folder, then tune supervision.
+            {editing
+              ? "Adjust the spec — changes apply on the next restart."
+              : "Detect candidates in a folder, then tune supervision."}
           </p>
         </div>
         <button className="btn-ghost" onClick={onCancel}>
@@ -338,7 +380,7 @@ export function CreateFlow({
         </button>
       </div>
 
-      <StepRail active={activeIdx} />
+      <StepRail active={activeIdx} skipFirst={editing} />
 
       {/* ── DETECT ─────────────────────────────────────────────────────────── */}
       {step === "Detect" && (
@@ -456,8 +498,26 @@ export function CreateFlow({
             <legend className="font-mono text-[11px] uppercase tracking-[0.16em] text-stone-400 dark:text-stone-500">
               Command
             </legend>
-            <Field id="cf-name" label="Name">
-              <input id="cf-name" className={fieldCls} placeholder="queue-worker" value={name} onChange={(e) => setName(e.target.value)} />
+            <Field id="cf-name" label="Name" hint={editing ? "locked — identity key" : undefined}>
+              {editing ? (
+                <div className="relative">
+                  <input
+                    id="cf-name"
+                    className={`${fieldCls} cursor-not-allowed pr-10 opacity-70`}
+                    value={name}
+                    readOnly
+                    aria-readonly="true"
+                  />
+                  <span
+                    className="pointer-events-none absolute inset-y-0 right-3 flex items-center font-mono text-xs text-stone-400 dark:text-stone-500"
+                    aria-hidden
+                  >
+                    🔒
+                  </span>
+                </div>
+              ) : (
+                <input id="cf-name" className={fieldCls} placeholder="queue-worker" value={name} onChange={(e) => setName(e.target.value)} />
+              )}
             </Field>
             <Field id="cf-cmd" label="Command">
               <input id="cf-cmd" className={fieldCls} placeholder="php" value={command} onChange={(e) => setCommand(e.target.value)} />
@@ -469,7 +529,7 @@ export function CreateFlow({
               <input id="cf-dir" className={fieldCls} placeholder="." value={dir} onChange={(e) => setDir(e.target.value)} />
             </Field>
           </div>
-          <StepNav onBack={() => goto("Detect")} onNext={() => goto("Mode")} nextDisabled={!commandValid} />
+          <StepNav onBack={editing ? undefined : () => goto("Detect")} onNext={() => goto("Mode")} nextDisabled={!commandValid} />
         </div>
       )}
 
@@ -646,13 +706,21 @@ export function CreateFlow({
                 <span className="break-words">{scanError}</span>
               </div>
             )}
+            {savedNote && (
+              <div className="mt-3 flex items-start gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-700 dark:text-emerald-300">
+                <span className="font-mono font-bold">✓</span>
+                <span className="break-words">Saved — restart the worker to apply changes.</span>
+              </div>
+            )}
           </div>
           <div className="flex items-center justify-between">
             <button className="btn-ghost" onClick={() => goto("Recovery")}>
               ← Back
             </button>
-            <button className="btn-primary" onClick={confirm} disabled={saving || !commandValid}>
-              {saving ? "Creating…" : "Create worker"}
+            <button className="btn-primary" onClick={confirm} disabled={saving || savedNote || !commandValid}>
+              {saving
+                ? editing ? "Saving…" : "Creating…"
+                : editing ? "Save changes" : "Create worker"}
             </button>
           </div>
         </div>
@@ -666,15 +734,19 @@ function StepNav({
   onNext,
   nextDisabled,
 }: {
-  onBack: () => void;
+  onBack?: () => void;
   onNext: () => void;
   nextDisabled?: boolean;
 }) {
   return (
     <div className="flex items-center justify-between">
-      <button className="btn-ghost" onClick={onBack}>
-        ← Back
-      </button>
+      {onBack ? (
+        <button className="btn-ghost" onClick={onBack}>
+          ← Back
+        </button>
+      ) : (
+        <span aria-hidden />
+      )}
       <button className="btn-primary" onClick={onNext} disabled={nextDisabled}>
         Next →
       </button>

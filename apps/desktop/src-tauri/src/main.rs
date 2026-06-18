@@ -24,6 +24,11 @@ async fn add_worker(state: tauri::State<'_, AppState>, spec: WorkerSpec) -> Resu
 }
 
 #[tauri::command]
+async fn get_worker(state: tauri::State<'_, AppState>, name: String) -> Result<serde_json::Value, String> {
+    bridge::get_worker(&state, &name).await
+}
+
+#[tauri::command]
 async fn start_worker(state: tauri::State<'_, AppState>, name: String) -> Result<(), String> {
     bridge::start_worker(&state, &name).await
 }
@@ -116,6 +121,7 @@ fn main() {
             daemon_status,
             list_workers,
             add_worker,
+            get_worker,
             start_worker,
             stop_worker,
             restart_worker,

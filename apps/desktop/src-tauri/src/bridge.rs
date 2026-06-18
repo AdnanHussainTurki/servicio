@@ -27,6 +27,11 @@ pub async fn add_worker(state: &AppState, spec: WorkerSpec) -> Result<(), String
     client.add_worker(&spec).await.map_err(|e| e.to_string())
 }
 
+pub async fn get_worker(state: &AppState, name: &str) -> Result<serde_json::Value, String> {
+    let mut c = state.client.lock().await;
+    c.get_worker(name).await.map_err(|e| e.to_string())
+}
+
 pub async fn start_worker(state: &AppState, name: &str) -> Result<(), String> {
     let mut client = state.client.lock().await;
     client.start_worker(name).await.map_err(|e| e.to_string())
