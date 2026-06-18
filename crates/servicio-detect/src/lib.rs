@@ -80,4 +80,16 @@ mod tests {
         let all = detect_all(dir.path());
         assert!(all.iter().any(|s| s.source == "generic"));
     }
+    #[test]
+    fn detect_all_dedups_identical_commands() {
+        let dir = tempfile::tempdir().unwrap();
+        // Procfile + Python both could suggest the same script; ensure no exact dup remains.
+        std::fs::write(dir.path().join("Procfile"), "worker: python worker.py\n").unwrap();
+        std::fs::write(dir.path().join("worker.py"), "print(1)").unwrap();
+        std::fs::write(dir.path().join("requirements.txt"), "x").unwrap();
+        let all = detect_all(dir.path());
+        // python suggests `python ["worker.py"]`; procfile suggests `python ["worker.py"]` — must dedup to one.
+        let count = all.iter().filter(|s| s.command == "python" && s.args == vec!["worker.py".to_string()]).count();
+        assert_eq!(count, 1);
+    }
 }
