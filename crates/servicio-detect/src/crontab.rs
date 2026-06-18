@@ -1,4 +1,4 @@
-use crate::{Detector, SuggestionDraft};
+use crate::{folder_group, Detector, SuggestionDraft};
 use servicio_core::worker::{RunMode, Schedule, OverlapPolicy};
 use std::path::Path;
 
@@ -24,6 +24,7 @@ impl Detector for Crontab {
                 name: format!("cron-{command}").replace(['/', '.'], "-"),
                 command, args, working_dir: root.to_path_buf(),
                 run_mode: RunMode::Scheduled { schedule: Schedule::Cron(expr), overlap: OverlapPolicy::Skip },
+                group: folder_group(root), tags: vec!["crontab".into()],
             });
         }
         out

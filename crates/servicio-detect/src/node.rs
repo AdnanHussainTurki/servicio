@@ -1,4 +1,4 @@
-use crate::{Detector, SuggestionDraft};
+use crate::{folder_group, Detector, SuggestionDraft};
 use servicio_core::worker::RunMode;
 use std::path::Path;
 
@@ -21,6 +21,7 @@ impl Detector for Node {
                         name: format!("node-{name}"), command: "npm".into(),
                         args: vec!["run".into(), name.clone()],
                         working_dir: root.to_path_buf(), run_mode: RunMode::Daemon { concurrency: 1 },
+                        group: folder_group(root), tags: vec!["node".into()],
                     });
                 }
             }

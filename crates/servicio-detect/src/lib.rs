@@ -9,6 +9,12 @@ mod python;
 mod node;
 mod procfile;
 mod crontab;
+mod tasks;
+
+/// Folder name of `root`, used as the default suggestion group.
+pub fn folder_group(root: &std::path::Path) -> Option<String> {
+    root.file_name().and_then(|n| n.to_str()).map(|s| s.to_string())
+}
 
 /// A proposed worker the user confirms/edits before it's created.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -20,6 +26,8 @@ pub struct SuggestionDraft {
     pub args: Vec<String>,
     pub working_dir: PathBuf,
     pub run_mode: RunMode,
+    pub group: Option<String>,
+    pub tags: Vec<String>,
 }
 
 pub trait Detector {
@@ -40,6 +48,8 @@ impl Detector for Generic {
             args: vec![],
             working_dir: root.to_path_buf(),
             run_mode: RunMode::Daemon { concurrency: 1 },
+            group: folder_group(root),
+            tags: vec![],
         }]
     }
 }
@@ -52,6 +62,7 @@ pub fn detect_all(root: &Path) -> Vec<SuggestionDraft> {
         Box::new(node::Node),
         Box::new(procfile::Procfile),
         Box::new(crontab::Crontab),
+        Box::new(tasks::Tasks),
         Box::new(Generic),
     ];
     let mut out: Vec<SuggestionDraft> = Vec::new();
