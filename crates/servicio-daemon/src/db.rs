@@ -9,6 +9,18 @@ pub struct Db {
 
 impl Db {
     pub fn open(path: &Path) -> rusqlite::Result<Self> {
+        // rusqlite/SQLite won't create missing parent dirs; do it so a fresh
+        // base dir (e.g. `add --db /tmp/servicio/servicio.db`) works first time.
+        if let Some(parent) = path.parent() {
+            if !parent.as_os_str().is_empty() {
+                std::fs::create_dir_all(parent).map_err(|e| {
+                    rusqlite::Error::SqliteFailure(
+                        rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_CANTOPEN),
+                        Some(format!("create db dir {}: {e}", parent.display())),
+                    )
+                })?;
+            }
+        }
         let conn = Connection::open(path)?;
         let db = Self { conn };
         db.migrate()?;
@@ -106,6 +118,15 @@ mod tests {
             autostart: true,
             enabled: true,
         }
+    }
+
+    #[test]
+    fn open_creates_missing_parent_dir() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("nested/sub/servicio.db");
+        let db = Db::open(&path).unwrap();
+        db.upsert_worker(&spec("q")).unwrap();
+        assert!(path.exists());
     }
 
     #[test]
