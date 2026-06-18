@@ -1,11 +1,13 @@
 import { create } from "zustand";
-import type { WorkerStatus, WorkerEvent, DaemonStatus } from "./types";
+import type { WorkerStatus, WorkerEvent, DaemonStatus, MetricPointT } from "./types";
 
 const LOG_CAP = 1000;
+const METRIC_CAP = 200;
 
 interface State {
   workers: Record<string, WorkerStatus>;
   logs: Record<string, string[]>;
+  metrics: Record<string, MetricPointT[]>;
   daemon: DaemonStatus | null;
   lastError: string | null;
   setWorkers: (list: WorkerStatus[]) => void;
@@ -18,6 +20,7 @@ interface State {
 export const useStore = create<State>((set) => ({
   workers: {},
   logs: {},
+  metrics: {},
   daemon: null,
   lastError: null,
   setWorkers: (list) =>
@@ -33,12 +36,18 @@ export const useStore = create<State>((set) => ({
           i.index === e.instance ? { ...i, state: e.to } : i
         );
         return { workers: { ...s.workers, [e.worker]: { ...w, instances } } };
-      } else {
+      } else if (e.kind === "log") {
         const prev = s.logs[e.worker] ?? [];
         const next = [...prev, `[${e.stream}] ${e.line}`];
         if (next.length > LOG_CAP) next.splice(0, next.length - LOG_CAP);
         return { logs: { ...s.logs, [e.worker]: next } };
+      } else if (e.kind === "metric") {
+        const prev = s.metrics[e.worker] ?? [];
+        const next = [...prev, { ts: e.ts, cpu: e.cpu, mem: e.mem }];
+        if (next.length > METRIC_CAP) next.splice(0, next.length - METRIC_CAP);
+        return { metrics: { ...s.metrics, [e.worker]: next } };
       }
+      return {};
     }),
-  reset: () => set(() => ({ workers: {}, logs: {}, daemon: null, lastError: null })),
+  reset: () => set(() => ({ workers: {}, logs: {}, metrics: {}, daemon: null, lastError: null })),
 }));

@@ -25,7 +25,7 @@ where
         Ok(c) => c,
         Err(_) => return,
     };
-    let mut lines = match client.subscribe(&["state", "log"], None).await {
+    let mut lines = match client.subscribe(&["state", "log", "metric"], None).await {
         Ok(l) => l,
         Err(_) => return,
     };

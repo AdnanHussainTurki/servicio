@@ -1,13 +1,14 @@
 import { useStore } from "../store";
 import { api, withError } from "../api";
 import { LogView } from "./LogView";
+import { MetricsTab } from "./MetricsTab";
 import { StatusDot } from "./StatusDot";
 import { worstState, styleFor } from "./status";
 import { useState } from "react";
 
 export function WorkerDetail({ name, onBack }: { name: string; onBack: () => void }) {
   const w = useStore((s) => s.workers[name]);
-  const [tab, setTab] = useState<"logs" | "config">("logs");
+  const [tab, setTab] = useState<"logs" | "metrics" | "config">("logs");
 
   if (!w)
     return (
@@ -24,7 +25,7 @@ export function WorkerDetail({ name, onBack }: { name: string; onBack: () => voi
   const restarts = w.instances.reduce((n, i) => n + i.restart_count, 0);
   const running = w.instances.filter((i) => i.state === "running").length;
 
-  const TabBtn = ({ id, label }: { id: "logs" | "config"; label: string }) => (
+  const TabBtn = ({ id, label }: { id: "logs" | "metrics" | "config"; label: string }) => (
     <button
       onClick={() => setTab(id)}
       className={`-mb-px border-b-2 px-1 pb-2.5 text-sm font-medium transition ${
@@ -101,12 +102,13 @@ export function WorkerDetail({ name, onBack }: { name: string; onBack: () => voi
       {/* tabs */}
       <div className="mb-4 mt-6 flex gap-6 border-b border-stone-200/70 dark:border-white/[0.06]">
         <TabBtn id="logs" label="Logs" />
+        <TabBtn id="metrics" label="Metrics" />
         <TabBtn id="config" label="Config" />
       </div>
 
-      {tab === "logs" ? (
-        <LogView worker={name} />
-      ) : (
+      {tab === "logs" && <LogView worker={name} />}
+      {tab === "metrics" && <MetricsTab worker={name} />}
+      {tab === "config" && (
         <pre className="scroll-thin overflow-auto rounded-xl border border-white/10 bg-[#0a0c10] p-4
           font-mono text-xs leading-relaxed text-stone-300 shadow-panel-dark">
           {JSON.stringify(w, null, 2)}

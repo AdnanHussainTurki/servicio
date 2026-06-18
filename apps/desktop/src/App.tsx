@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 import { useStore } from "./store";
-import { api, subscribeEvents, withError } from "./api";
+import { api, subscribeEvents } from "./api";
 import { Sidebar } from "./components/Sidebar";
 import { StatusFooter } from "./components/StatusFooter";
 import { Dashboard } from "./components/Dashboard";
 import { WorkerDetail } from "./components/WorkerDetail";
-import { AddWorkerForm } from "./components/AddWorkerForm";
+import { CreateFlow } from "./components/CreateFlow";
 
 export default function App() {
   const [view, setView] = useState("dashboard");
@@ -40,12 +40,10 @@ export default function App() {
               </p>
             </div>
           ) : adding ? (
-            <AddWorkerForm
-              onSubmit={async (spec) => {
-                const ok = await withError(api.addWorker(spec).then(() => true));
-                if (ok) setAdding(false);
-              }}
-              onCancel={() => setAdding(false)} />
+            <CreateFlow
+              onDone={() => setAdding(false)}
+              onCancel={() => setAdding(false)}
+            />
           ) : detail ? (
             <WorkerDetail name={detail} onBack={() => setDetail(null)} />
           ) : (

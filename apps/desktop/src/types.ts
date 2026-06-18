@@ -28,4 +28,16 @@ export interface StateEventPayload {
 export interface LogEventPayload {
   kind: "log"; worker: string; instance: number; stream: string; line: string;
 }
-export type WorkerEvent = StateEventPayload | LogEventPayload;
+export type RunModeAny =
+  | { type: "daemon"; concurrency: number }
+  | { type: "scheduled"; schedule: { cron: string } | { interval_secs: number }; overlap: "skip" | "queue" | "kill_previous" }
+  | { type: "batch"; run_count: number; delay_secs: number };
+
+export interface SuggestionDraft {
+  label: string; source: string; name: string;
+  command: string; args: string[]; working_dir: string; run_mode: RunModeAny;
+}
+export interface MetricPointT { ts: number; cpu: number; mem: number }
+export interface MetricEventPayload { kind: "metric"; worker: string; instance: number; ts: number; cpu: number; mem: number }
+
+export type WorkerEvent = StateEventPayload | LogEventPayload | MetricEventPayload;

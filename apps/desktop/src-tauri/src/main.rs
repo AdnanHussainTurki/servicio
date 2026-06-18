@@ -38,8 +38,19 @@ async fn restart_worker(state: tauri::State<'_, AppState>, name: String) -> Resu
     bridge::restart_worker(&state, &name).await
 }
 
+#[tauri::command]
+async fn detect_workers(state: tauri::State<'_, AppState>, path: String) -> Result<serde_json::Value, String> {
+    bridge::detect_workers(&state, &path).await
+}
+
+#[tauri::command]
+async fn metrics(state: tauri::State<'_, AppState>, worker: String, since_secs: u64) -> Result<serde_json::Value, String> {
+    bridge::metrics(&state, &worker, since_secs).await
+}
+
 fn main() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_notification::init())
         .setup(|app| {
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
@@ -85,7 +96,9 @@ fn main() {
             add_worker,
             start_worker,
             stop_worker,
-            restart_worker
+            restart_worker,
+            detect_workers,
+            metrics
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

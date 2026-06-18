@@ -11,8 +11,12 @@ full design.
   (JSONL over a Unix domain socket) + a thin `servicio` CLI client. Live state/log events.
 - **Phase 2b (done):** minimal Tauri desktop GUI — auto-spawns the daemon sidecar, card-grid
   dashboard with live status, worker detail + live logs, start/stop/restart, simple add form.
-- **Next:** Phase 2c — creation wizard, framework autodetect UI, metrics graphs,
-  notifications; then OS-service install + run-on-boot, packaging.
+- **Phase 2c (done):** scheduled (cron/interval) + batch (run-N) run modes; per-instance
+  CPU/memory sampling with rolling storage; framework autodetect (`servicio-detect`:
+  Laravel/Python/Node/Procfile/Crontab/Generic); GUI detect→4-step wizard
+  (Command→Mode→Recovery→Review), live metrics graphs, and native crash/recovery notifications.
+  CLI: `servicio detect <path>`, `servicio metrics <name>`.
+- **Next:** OS-service install + run-on-boot; code signing / universal builds (packaging phase).
 
 ### Run the GUI (dev)
 
