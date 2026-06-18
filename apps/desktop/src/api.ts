@@ -28,6 +28,13 @@ export const api = {
   serviceStatus: () => invoke<{ installed: boolean; supported?: boolean }>("service_status"),
   installService: () => invoke<void>("install_service"),
   uninstallService: () => invoke<void>("uninstall_service"),
+  checkUpdate: async (): Promise<string | null> => {
+    try {
+      const { check } = await import("@tauri-apps/plugin-updater");
+      const u = await check();
+      return u ? `Update available: ${u.version}` : "Up to date";
+    } catch (e) { return `Updater unavailable: ${String(e)}`; }
+  },
 };
 
 /** Wire daemon events into the store. Call once at app start. */

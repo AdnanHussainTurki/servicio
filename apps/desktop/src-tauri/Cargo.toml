@@ -31,6 +31,7 @@ log = "0.4"
 tauri = { version = "2.11.2" }
 tauri-plugin-log = "2"
 tauri-plugin-notification = "2"
+tauri-plugin-updater = "2"
 servicio-cli = { path = "../../../crates/servicio-cli" }
 servicio-ipc = { path = "../../../crates/servicio-ipc" }
 servicio-core = { path = "../../../crates/servicio-core" }

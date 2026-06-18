@@ -10,11 +10,14 @@
     "preview": "vite preview",
     "test": "vitest run",
     "tauri": "tauri",
-    "prepare-sidecar": "bash scripts/prepare-sidecar.sh"
+    "prepare-sidecar": "bash scripts/prepare-sidecar.sh",
+    "prepare-sidecar:universal": "UNIVERSAL=1 bash scripts/prepare-sidecar.sh",
+    "build:universal": "npm run prepare-sidecar:universal && tauri build --target universal-apple-darwin"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.11.1",
     "@tauri-apps/plugin-notification": "^2.3.3",
+    "@tauri-apps/plugin-updater": "^2.10.1",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
     "zustand": "^5.0.14"

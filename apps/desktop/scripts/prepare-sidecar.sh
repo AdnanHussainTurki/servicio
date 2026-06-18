@@ -1,10 +1,25 @@
 #!/usr/bin/env bash
-# Build the release daemon and stage it as a Tauri externalBin (triple-suffixed).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
-TRIPLE="$(rustc -vV | sed -n 's/host: //p')"
 BIN_DIR="$ROOT/apps/desktop/src-tauri/binaries"
 mkdir -p "$BIN_DIR"
-cargo build --release -p servicio-daemon --manifest-path "$ROOT/Cargo.toml"
-cp "$ROOT/target/release/servicio-daemon" "$BIN_DIR/servicio-daemon-$TRIPLE"
-echo "staged $BIN_DIR/servicio-daemon-$TRIPLE"
+HOST="$(rustc -vV | sed -n 's/host: //p')"
+
+if [ "${UNIVERSAL:-0}" = "1" ]; then
+  # Tauri's `--target universal-apple-darwin` needs BOTH: a per-arch sidecar for each
+  # per-arch compile, AND a lipo'd `-universal-apple-darwin` sidecar for the final bundle
+  # copy. Stage all three.
+  cargo build --release -p servicio-daemon --target aarch64-apple-darwin --manifest-path "$ROOT/Cargo.toml"
+  cargo build --release -p servicio-daemon --target x86_64-apple-darwin  --manifest-path "$ROOT/Cargo.toml"
+  cp "$ROOT/target/aarch64-apple-darwin/release/servicio-daemon" "$BIN_DIR/servicio-daemon-aarch64-apple-darwin"
+  cp "$ROOT/target/x86_64-apple-darwin/release/servicio-daemon"  "$BIN_DIR/servicio-daemon-x86_64-apple-darwin"
+  lipo -create \
+    "$ROOT/target/aarch64-apple-darwin/release/servicio-daemon" \
+    "$ROOT/target/x86_64-apple-darwin/release/servicio-daemon" \
+    -output "$BIN_DIR/servicio-daemon-universal-apple-darwin"
+  echo "staged sidecars: servicio-daemon-{aarch64,x86_64,universal}-apple-darwin"
+else
+  cargo build --release -p servicio-daemon --manifest-path "$ROOT/Cargo.toml"
+  cp "$ROOT/target/release/servicio-daemon" "$BIN_DIR/servicio-daemon-$HOST"
+  echo "staged $BIN_DIR/servicio-daemon-$HOST"
+fi
