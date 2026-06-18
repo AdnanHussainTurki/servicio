@@ -203,6 +203,7 @@ export function CreateFlow({
   const [suggestions, setSuggestions] = useState<SuggestionDraft[]>([]);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [savedNote, setSavedNote] = useState(false);
+  const [bulkCreating, setBulkCreating] = useState(false);
 
   /* command step */
   const [name, setName] = useState(editWorker?.name ?? "");
@@ -302,10 +303,50 @@ export function CreateFlow({
     setStep("Command");
   }
 
-  function continueFromDetect() {
-    const firstIdx = [...selected].sort((a, b) => a - b)[0];
-    const draft = firstIdx != null ? suggestions[firstIdx] : undefined;
-    if (draft) adopt(draft);
+  /** Build a ready-to-create worker spec from a detected suggestion (sensible defaults). */
+  function specFromDraft(d: SuggestionDraft): AddWorkerSpec {
+    return {
+      name: d.name,
+      display_name: d.display_name ?? null,
+      command: d.command,
+      args: d.args,
+      working_dir: d.working_dir || ".",
+      env: {},
+      run_mode: d.run_mode as unknown as AddWorkerSpec["run_mode"],
+      restart: { kind: "on_failure", max_retries: 5, base_secs: 1, max_secs: 60, reset_window_secs: 30 },
+      autostart: true,
+      enabled: true,
+      group: d.group ?? null,
+      tags: d.tags ?? [],
+    };
+  }
+
+  // Continue from Detect: a single selection drops into the tuning flow; multiple
+  // selections are bulk-created right away from their detected defaults (one worker each).
+  async function continueFromDetect() {
+    const idxs = [...selected].sort((a, b) => a - b);
+    if (idxs.length <= 1) {
+      const draft = idxs[0] != null ? suggestions[idxs[0]] : undefined;
+      if (draft) adopt(draft);
+      return;
+    }
+    setBulkCreating(true);
+    setScanError(null);
+    const failed: string[] = [];
+    for (const i of idxs) {
+      const d = suggestions[i];
+      try {
+        await api.addWorker(specFromDraft(d));
+      } catch (err) {
+        failed.push(`${d.name}: ${String(err)}`);
+      }
+    }
+    setBulkCreating(false);
+    if (failed.length) {
+      setScanError(`Created ${idxs.length - failed.length}/${idxs.length}. Failed: ${failed.join("; ")}`);
+    } else {
+      onDone();
+    }
   }
 
   function fromScratch() {
@@ -500,6 +541,12 @@ export function CreateFlow({
                 );
               })}
 
+              {selected.size > 1 && (
+                <p className="px-1 font-mono text-[11px] text-stone-400 dark:text-stone-500">
+                  {selected.size} selected — each becomes its own worker with detected defaults. Edit any later to tune.
+                </p>
+              )}
+
               <div className="flex items-center justify-between gap-3 pt-1">
                 <button
                   className="font-mono text-xs text-stone-500 underline-offset-4 transition hover:text-signal-600 hover:underline dark:hover:text-signal-400"
@@ -510,9 +557,13 @@ export function CreateFlow({
                 <button
                   className="btn-primary"
                   onClick={continueFromDetect}
-                  disabled={selected.size === 0}
+                  disabled={selected.size === 0 || bulkCreating}
                 >
-                  Continue →
+                  {bulkCreating
+                    ? `Creating ${selected.size}…`
+                    : selected.size > 1
+                      ? `Create ${selected.size} workers →`
+                      : "Continue →"}
                 </button>
               </div>
             </div>
