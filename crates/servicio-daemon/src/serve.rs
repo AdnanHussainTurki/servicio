@@ -5,13 +5,13 @@ use servicio_core::event::SupervisorEvent;
 use servicio_core::manager::Manager;
 use servicio_core::process::TokioProcess;
 use servicio_core::worker::WorkerSpec;
+use servicio_ipc::transport;
 use servicio_ipc::types::{
     InstanceStatus as IpcInstanceStatus, LogEvent, StateEvent, WorkerStatus,
 };
 use servicio_ipc::Frame;
 use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::net::{UnixListener, UnixStream};
 use tokio::sync::watch;
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
@@ -59,8 +59,12 @@ impl ServeHandle {
 pub async fn serve(paths: Paths, token: String) -> std::io::Result<ServeHandle> {
     std::fs::create_dir_all(&paths.base)?;
     set_dir_private(&paths.base)?;
+    // Unix binds a filesystem socket (remove any stale file, set 0600 after).
+    // Windows binds a named pipe with no filesystem presence — both are no-ops.
+    #[cfg(unix)]
     let _ = std::fs::remove_file(paths.socket());
-    let listener = UnixListener::bind(paths.socket())?;
+    let listener = transport::Listener::bind(&transport::endpoint(&paths.base))?;
+    #[cfg(unix)]
     set_socket_perms(&paths.socket())?;
 
     let db = Db::open(&paths.db()).map_err(to_io)?;
@@ -102,7 +106,7 @@ pub async fn serve(paths: Paths, token: String) -> std::io::Result<ServeHandle> 
 }
 
 async fn accept_loop(
-    listener: UnixListener,
+    mut listener: transport::Listener,
     daemon: Arc<Daemon>,
     mut shutdown_rx: watch::Receiver<bool>,
 ) {
@@ -112,7 +116,7 @@ async fn accept_loop(
                 if *shutdown_rx.borrow() { break; }
             }
             accepted = listener.accept() => {
-                if let Ok((stream, _addr)) = accepted {
+                if let Ok(stream) = accepted {
                     let d = Arc::clone(&daemon);
                     tokio::spawn(handle_conn(stream, d));
                 }
@@ -121,8 +125,8 @@ async fn accept_loop(
     }
 }
 
-async fn handle_conn(stream: UnixStream, daemon: Arc<Daemon>) {
-    let (rd, wr) = stream.into_split();
+async fn handle_conn(stream: transport::ServerStream, daemon: Arc<Daemon>) {
+    let (rd, wr) = transport::split_server(stream);
     let wr = Arc::new(Mutex::new(wr));
     let mut reader = BufReader::new(rd);
     let mut authed = false;
@@ -187,7 +191,7 @@ async fn handle_conn(stream: UnixStream, daemon: Arc<Daemon>) {
 }
 
 fn spawn_forwarder(
-    wr: Arc<Mutex<tokio::net::unix::OwnedWriteHalf>>,
+    wr: Arc<Mutex<transport::ServerWrite>>,
     mut rx: tokio::sync::broadcast::Receiver<SupervisorEvent>,
     topics: Vec<String>,
     worker_filter: Option<String>,
@@ -295,7 +299,7 @@ fn spawn_forwarder(
 }
 
 async fn write_frame_locked(
-    wr: &Arc<Mutex<tokio::net::unix::OwnedWriteHalf>>,
+    wr: &Arc<Mutex<transport::ServerWrite>>,
     frame: &Frame,
 ) -> std::io::Result<()> {
     let mut guard = wr.lock().await;
@@ -632,7 +636,7 @@ async fn dispatch(daemon: &Arc<Daemon>, id: u64, method: &str, params: serde_jso
 /// Read one '\n'-terminated line into `buf` (without the newline), capping total
 /// bytes at `max`. Returns Ok(None) on clean EOF, Err on a too-long line.
 async fn read_line_capped(
-    reader: &mut BufReader<tokio::net::unix::OwnedReadHalf>,
+    reader: &mut BufReader<transport::ServerRead>,
     buf: &mut Vec<u8>,
     max: usize,
 ) -> std::io::Result<Option<()>> {
@@ -667,11 +671,6 @@ async fn read_line_capped(
 fn set_socket_perms(path: &std::path::Path) -> std::io::Result<()> {
     use std::os::unix::fs::PermissionsExt;
     std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))
-}
-
-#[cfg(not(unix))]
-fn set_socket_perms(_path: &std::path::Path) -> std::io::Result<()> {
-    Ok(())
 }
 
 #[cfg(unix)]

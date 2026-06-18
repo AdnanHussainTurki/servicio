@@ -2,7 +2,7 @@
 
 use servicio_app::bridge::{self, DaemonStatus};
 use servicio_app::events::run_event_pump;
-use servicio_app::sidecar::{daemon_program, default_base, ensure_daemon, socket_path};
+use servicio_app::sidecar::{daemon_program, default_base, ensure_daemon};
 use servicio_app::state::AppState;
 use servicio_core::worker::WorkerSpec;
 use servicio_ipc::types::WorkerStatus;
@@ -130,12 +130,11 @@ fn main() {
                         }
                     }
                 };
-                let socket = socket_path(&base);
-                if let Ok(state) = AppState::connect(&socket, &token).await {
+                if let Ok(state) = AppState::connect(&base, &token).await {
                     handle.manage(state);
                 }
                 let emit_handle = handle.clone();
-                run_event_pump(socket, token, move |payload| {
+                run_event_pump(base, token, move |payload| {
                     let _ = emit_handle.emit("worker-event", payload);
                 })
                 .await;

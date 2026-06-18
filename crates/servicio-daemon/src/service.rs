@@ -48,19 +48,73 @@ pub fn systemd_unit(spec: &ServiceSpec) -> String {
     )
 }
 
+/// Windows Task Scheduler XML: runs `<exe> serve --base <base>` at user logon.
+pub fn windows_task_xml(spec: &ServiceSpec) -> String {
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-16"?>
+<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <Description>Servicio supervisor daemon</Description>
+  </RegistrationInfo>
+  <Triggers>
+    <LogonTrigger>
+      <Enabled>true</Enabled>
+    </LogonTrigger>
+  </Triggers>
+  <Principals>
+    <Principal id="Author">
+      <LogonType>InteractiveToken</LogonType>
+      <RunLevel>LeastPrivilege</RunLevel>
+    </Principal>
+  </Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <StartWhenAvailable>true</StartWhenAvailable>
+    <Enabled>true</Enabled>
+  </Settings>
+  <Actions Context="Author">
+    <Exec>
+      <Command>{exe}</Command>
+      <Arguments>serve --base "{base}"</Arguments>
+    </Exec>
+  </Actions>
+</Task>
+"#,
+        exe = spec.exe.display(),
+        base = spec.base.display(),
+    )
+}
+
 /// Filename for the unit in `dir` (platform-shaped).
 fn unit_filename(label: &str) -> String {
-    if cfg!(target_os = "macos") {
+    #[cfg(target_os = "macos")]
+    {
         format!("{label}.plist")
-    } else {
+    }
+    #[cfg(target_os = "windows")]
+    {
+        format!("{label}.task.xml")
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        let _ = label;
         "servicio.service".to_string()
     }
 }
 
 fn unit_body(spec: &ServiceSpec) -> String {
-    if cfg!(target_os = "macos") {
+    #[cfg(target_os = "macos")]
+    {
         launchd_plist(spec)
-    } else {
+    }
+    #[cfg(target_os = "windows")]
+    {
+        windows_task_xml(spec)
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
         systemd_unit(spec)
     }
 }
@@ -115,7 +169,22 @@ fn run_loader(path: &Path, label: &str, enable: bool) {
             .status();
         let _ = label;
     }
-    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    #[cfg(target_os = "windows")]
+    {
+        if enable {
+            // Register (or replace) the logon task from the written XML descriptor.
+            let _ = std::process::Command::new("schtasks")
+                .args(["/create", "/tn", label, "/xml"])
+                .arg(path)
+                .arg("/f")
+                .status();
+        } else {
+            let _ = std::process::Command::new("schtasks")
+                .args(["/delete", "/tn", label, "/f"])
+                .status();
+        }
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
     {
         let _ = (path, label, enable);
     }
@@ -131,7 +200,17 @@ pub fn default_service_dir() -> Option<PathBuf> {
     {
         dirs_config().map(|c| c.join("systemd/user"))
     }
-    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    #[cfg(target_os = "windows")]
+    {
+        // Stash the task XML under %LOCALAPPDATA%\Servicio (fallback to temp).
+        Some(
+            std::env::var_os("LOCALAPPDATA")
+                .map(PathBuf::from)
+                .unwrap_or_else(std::env::temp_dir)
+                .join("Servicio"),
+        )
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
     {
         None
     }

@@ -17,8 +17,11 @@ pub fn token_path(base: &std::path::Path) -> PathBuf { base.join("token") }
 
 /// Resolve the bundled `servicio-daemon` binary path, falling back to PATH.
 pub fn daemon_program() -> String {
+    // Tauri drops the sidecar next to the main exe, named with the platform's
+    // executable extension (`servicio-daemon.exe` on Windows).
+    let name = if cfg!(windows) { "servicio-daemon.exe" } else { "servicio-daemon" };
     std::env::current_exe().ok()
-        .and_then(|p| p.parent().map(|d| d.join("servicio-daemon")))
+        .and_then(|p| p.parent().map(|d| d.join(name)))
         .filter(|p| p.exists())
         .map(|p| p.to_string_lossy().into_owned())
         .unwrap_or_else(|| "servicio-daemon".to_string())
@@ -43,7 +46,7 @@ pub async fn ensure_daemon(base: &std::path::Path, daemon_program: &str) -> Resu
 
     // Is a daemon already running? If so, check it isn't stale.
     if let Ok(token) = read_token(base) {
-        if let Ok(mut client) = Client::connect(&socket_path(base), &token).await {
+        if let Ok(mut client) = Client::connect(base, &token).await {
             let running_build = client.daemon_info().await.ok()
                 .and_then(|v| v.get("build").and_then(|b| b.as_str().map(String::from)));
             let bundled = bundled_build_id();
@@ -54,13 +57,18 @@ pub async fn ensure_daemon(base: &std::path::Path, daemon_program: &str) -> Resu
             if !stale {
                 return Ok(token); // current (or build undeterminable) — use it
             }
-            // Stale daemon: ask it to exit, then wait for the socket to clear.
+            // Stale daemon: ask it to exit, then wait for it to release the endpoint.
             let _ = client.shutdown().await;
             drop(client);
+            // Unix: watch the socket file disappear. Windows: the named pipe has no
+            // filesystem presence, so just give the old daemon a moment to drop it.
+            #[cfg(unix)]
             for _ in 0..50 {
                 if !socket_path(base).exists() { break; }
                 tokio::time::sleep(Duration::from_millis(100)).await;
             }
+            #[cfg(windows)]
+            tokio::time::sleep(Duration::from_millis(300)).await;
         }
     }
 
@@ -71,7 +79,7 @@ pub async fn ensure_daemon(base: &std::path::Path, daemon_program: &str) -> Resu
         .map_err(|e| anyhow!("spawn daemon: {e}"))?;
     for _ in 0..50 {
         if let Ok(token) = read_token(base) {
-            if Client::connect(&socket_path(base), &token).await.is_ok() {
+            if Client::connect(base, &token).await.is_ok() {
                 return Ok(token);
             }
         }

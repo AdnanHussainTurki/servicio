@@ -12,7 +12,7 @@ async fn client_handshakes_and_lists_after_add() {
     let handle = serve(paths.clone(), "secret".into()).await.unwrap();
     tokio::time::sleep(Duration::from_millis(100)).await;
 
-    let mut client = Client::connect(&paths.socket(), "secret").await.unwrap();
+    let mut client = Client::connect(&paths.base, "secret").await.unwrap();
 
     let spec = WorkerSpec {
         name: "q".into(),
