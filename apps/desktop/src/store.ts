@@ -8,6 +8,7 @@ interface State {
   workers: Record<string, WorkerStatus>;
   logs: Record<string, string[]>;
   metrics: Record<string, MetricPointT[]>;
+  latestMetric: Record<string, Record<number, { cpu: number; mem: number }>>;
   daemon: DaemonStatus | null;
   lastError: string | null;
   daemonWarning: string | null;
@@ -23,6 +24,7 @@ export const useStore = create<State>((set) => ({
   workers: {},
   logs: {},
   metrics: {},
+  latestMetric: {},
   daemon: null,
   lastError: null,
   daemonWarning: null,
@@ -49,9 +51,16 @@ export const useStore = create<State>((set) => ({
         const prev = s.metrics[e.worker] ?? [];
         const next = [...prev, { ts: e.ts, cpu: e.cpu, mem: e.mem }];
         if (next.length > METRIC_CAP) next.splice(0, next.length - METRIC_CAP);
-        return { metrics: { ...s.metrics, [e.worker]: next } };
+        const prevLatest = s.latestMetric[e.worker] ?? {};
+        return {
+          metrics: { ...s.metrics, [e.worker]: next },
+          latestMetric: {
+            ...s.latestMetric,
+            [e.worker]: { ...prevLatest, [e.instance]: { cpu: e.cpu, mem: e.mem } },
+          },
+        };
       }
       return {};
     }),
-  reset: () => set(() => ({ workers: {}, logs: {}, metrics: {}, daemon: null, lastError: null, daemonWarning: null })),
+  reset: () => set(() => ({ workers: {}, logs: {}, metrics: {}, latestMetric: {}, daemon: null, lastError: null, daemonWarning: null })),
 }));
