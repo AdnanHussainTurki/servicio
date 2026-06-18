@@ -205,6 +205,11 @@ export function CreateFlow({
     }
   }
 
+  async function browse() {
+    const p = await api.pickFolder();
+    if (p) setFolder(p);
+  }
+
   function toggle(i: number) {
     setSelected((prev) => {
       const next = new Set(prev);
@@ -343,6 +348,9 @@ export function CreateFlow({
                   />
                 </Field>
               </div>
+              <button type="button" className="btn-ghost" onClick={browse}>
+                Browse…
+              </button>
               <button className="btn-primary" onClick={scan} disabled={scanning}>
                 {scanning ? "Scanning…" : "Scan"}
               </button>
