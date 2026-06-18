@@ -336,6 +336,32 @@ async fn daemon_info_includes_build_and_shutdown_acks() {
     h.shutdown().await;
 }
 
+fn grouped(name: &str, group: &str) -> WorkerSpec {
+    let mut s = sleeper(name);
+    s.group = Some(group.to_string());
+    s
+}
+
+#[tokio::test]
+async fn start_group_starts_all_workers_in_group() {
+    let dir = tempfile::tempdir().unwrap();
+    let paths = Paths::new(dir.path().to_path_buf());
+    let h = start(paths.clone(), "secret".into()).await;
+    let _ = hello_then(&paths.socket(), vec![
+        Frame::Request { id: 1, method: "add_worker".into(), params: json!({"spec": grouped("a","billing")}) },
+        Frame::Request { id: 2, method: "add_worker".into(), params: json!({"spec": grouped("b","billing")}) },
+        Frame::Request { id: 3, method: "add_worker".into(), params: json!({"spec": grouped("c","other")}) },
+    ]).await;
+    let replies = hello_then(&paths.socket(), vec![
+        Frame::Request { id: 1, method: "start_group".into(), params: json!({"group":"billing"}) },
+        Frame::Request { id: 2, method: "list_workers".into(), params: json!({}) },
+        Frame::Request { id: 3, method: "stop_group".into(), params: json!({"group":"billing"}) },
+    ]).await;
+    match &replies[1] { Frame::Response { id:1, result: Some(v), .. } => assert_eq!(v["started"], 2), o => panic!("{o:?}") }
+    match &replies[3] { Frame::Response { id:3, result: Some(v), .. } => assert_eq!(v["stopped"], 2), o => panic!("{o:?}") }
+    h.shutdown().await;
+}
+
 #[tokio::test]
 async fn detect_workers_finds_laravel_in_fixture() {
     let dir = tempfile::tempdir().unwrap();

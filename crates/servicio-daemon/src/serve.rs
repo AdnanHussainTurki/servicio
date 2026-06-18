@@ -403,6 +403,45 @@ async fn dispatch(daemon: &Arc<Daemon>, id: u64, method: &str, params: serde_jso
             daemon.shutdown.notify_one();
             Frame::ok(id, serde_json::json!({"shutting_down": true}))
         }
+        "start_group" => {
+            let group = params.get("group").and_then(|g| g.as_str()).unwrap_or("");
+            // Workers whose spec.group matches (treat "Ungrouped"/empty as None).
+            let want_none = group.is_empty() || group == "Ungrouped";
+            let specs: Vec<servicio_core::worker::WorkerSpec> = {
+                let db = daemon.db.lock().await;
+                match db.list_workers() {
+                    Ok(all) => all.into_iter().filter(|s| {
+                        match &s.group { Some(g) => g == group, None => want_none }
+                    }).collect(),
+                    Err(e) => return Frame::err(id, "db_error", &e.to_string()),
+                }
+            };
+            let mut started = 0u32;
+            {
+                let mut mgr = daemon.manager.lock().await;
+                for spec in specs { mgr.start_worker(spec).await; started += 1; }
+            }
+            tracing::info!("start_group '{group}' ({started})");
+            Frame::ok(id, json!({"started": started}))
+        }
+        "stop_group" => {
+            let group = params.get("group").and_then(|g| g.as_str()).unwrap_or("");
+            let want_none = group.is_empty() || group == "Ungrouped";
+            let names: Vec<String> = {
+                let db = daemon.db.lock().await;
+                match db.list_workers() {
+                    Ok(all) => all.into_iter().filter(|s| match &s.group { Some(g) => g == group, None => want_none }).map(|s| s.name).collect(),
+                    Err(e) => return Frame::err(id, "db_error", &e.to_string()),
+                }
+            };
+            let mut stopped = 0u32;
+            {
+                let mut mgr = daemon.manager.lock().await;
+                for name in names { if mgr.stop_worker(&name).await { stopped += 1; } }
+            }
+            tracing::info!("stop_group '{group}' ({stopped})");
+            Frame::ok(id, json!({"stopped": stopped}))
+        }
         other => Frame::err(id, "unknown_method", &format!("no such method: {other}")),
     }
 }

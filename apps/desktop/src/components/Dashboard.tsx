@@ -2,9 +2,39 @@ import { useMemo, useState } from "react";
 import { useStore } from "../store";
 import { api, withError } from "../api";
 import type { WorkerStatus } from "../types";
+import { computeGroups, fmtMem, type GroupStat } from "../groupStats";
 import { WorkerCard } from "./WorkerCard";
 
 const UNGROUPED = "Ungrouped";
+
+/** A compact instrument readout: value + unit label, mono tabular. */
+function StatReadout({ value, label }: { value: string; label: string }) {
+  return (
+    <span className="inline-flex items-baseline gap-1">
+      <span className="font-mono text-xs font-semibold tabular-nums text-stone-700 dark:text-stone-200">
+        {value}
+      </span>
+      <span className="font-mono text-[10px] uppercase tracking-wide text-stone-400 dark:text-stone-500">
+        {label}
+      </span>
+    </span>
+  );
+}
+
+/** Live aggregate readout for a group section header: mem · cpu · processes. */
+function GroupStatStrip({ stat }: { stat: GroupStat | undefined }) {
+  if (!stat || stat.processes === 0) return null;
+  return (
+    <span className="inline-flex items-center gap-3 rounded-full border border-stone-200/70 bg-white/60 px-3 py-1
+      shadow-sm dark:border-white/[0.06] dark:bg-white/[0.03]">
+      <StatReadout value={fmtMem(stat.mem)} label="mem" />
+      <span className="h-3 w-px bg-stone-200 dark:bg-white/10" aria-hidden />
+      <StatReadout value={`${stat.cpu.toFixed(1)}%`} label="cpu" />
+      <span className="h-3 w-px bg-stone-200 dark:bg-white/10" aria-hidden />
+      <StatReadout value={String(stat.processes)} label={stat.processes === 1 ? "proc" : "procs"} />
+    </span>
+  );
+}
 
 function groupOf(w: WorkerStatus): string {
   const g = w.group?.trim();
@@ -118,40 +148,45 @@ function WorkerGrid({
 function GroupSection({
   name,
   workers,
+  stat,
   onOpen,
   onEditWorker,
 }: {
   name: string;
   workers: WorkerStatus[];
+  stat: GroupStat | undefined;
   onOpen: (name: string) => void;
   onEditWorker: (name: string) => void;
 }) {
   const [open, setOpen] = useState(true);
   return (
     <section>
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        aria-expanded={open}
-        className="group/sec mb-3 flex w-full items-center gap-2.5 text-left"
-      >
-        <span
-          className={
-            "font-mono text-xs text-stone-400 transition-transform dark:text-stone-500 " +
-            (open ? "rotate-90" : "rotate-0")
-          }
-          aria-hidden
+      <div className="group/sec mb-3 flex items-center gap-2.5">
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          aria-expanded={open}
+          className="flex items-center gap-2.5 text-left"
         >
-          ▸
-        </span>
-        <h2 className="font-display text-sm font-semibold uppercase tracking-[0.14em] text-stone-600 dark:text-stone-300">
-          {name}
-        </h2>
-        <span className="rounded-full bg-stone-500/10 px-2 py-0.5 font-mono text-[10px] font-semibold tabular-nums text-stone-500 dark:bg-white/[0.05] dark:text-stone-400">
-          {workers.length}
-        </span>
+          <span
+            className={
+              "font-mono text-xs text-stone-400 transition-transform dark:text-stone-500 " +
+              (open ? "rotate-90" : "rotate-0")
+            }
+            aria-hidden
+          >
+            ▸
+          </span>
+          <h2 className="font-display text-sm font-semibold uppercase tracking-[0.14em] text-stone-600 dark:text-stone-300">
+            {name}
+          </h2>
+          <span className="rounded-full bg-stone-500/10 px-2 py-0.5 font-mono text-[10px] font-semibold tabular-nums text-stone-500 dark:bg-white/[0.05] dark:text-stone-400">
+            {workers.length}
+          </span>
+        </button>
+        <GroupStatStrip stat={stat} />
         <span className="ml-1 h-px flex-1 bg-stone-200/70 dark:bg-white/[0.06]" aria-hidden />
-      </button>
+      </div>
       {open && <WorkerGrid workers={workers} onOpen={onOpen} onEditWorker={onEditWorker} />}
     </section>
   );
@@ -167,7 +202,27 @@ export function Dashboard({
   onEditWorker?: (name: string) => void;
 }) {
   const workers = Object.values(useStore((s) => s.workers));
+  const latestMetric = useStore((s) => s.latestMetric);
   const [activeTags, setActiveTags] = useState<Set<string>>(new Set());
+
+  // live per-group aggregates (mem/cpu/processes) keyed by group name
+  const statByGroup = useMemo(() => {
+    const stats = computeGroups(workers, latestMetric);
+    return new Map(stats.map((s) => [s.group, s]));
+  }, [workers, latestMetric]);
+
+  // overall totals across all groups (only meaningful once metrics flow)
+  const totals = useMemo(() => {
+    let mem = 0,
+      cpu = 0,
+      procs = 0;
+    for (const s of statByGroup.values()) {
+      mem += s.mem;
+      cpu += s.cpu;
+      procs += s.processes;
+    }
+    return { mem, cpu, procs };
+  }, [statByGroup]);
 
   const running = workers.filter((w) => w.instances.some((i) => i.state === "running")).length;
   const warming = workers.filter((w) =>
@@ -234,6 +289,17 @@ export function Dashboard({
           <SummaryChip tone="live" count={running} label="running" />
           <SummaryChip tone="warm" count={warming} label="warming" />
           <SummaryChip tone="down" count={down} label="down" />
+          {totals.procs > 0 && (
+            <span
+              className="inline-flex items-center gap-3 rounded-full border border-stone-200/80 bg-white/70 px-3 py-1
+                shadow-sm dark:border-white/[0.07] dark:bg-white/[0.03]"
+              title="Total across all groups"
+            >
+              <StatReadout value={fmtMem(totals.mem)} label="mem" />
+              <span className="h-3 w-px bg-stone-200 dark:bg-white/10" aria-hidden />
+              <StatReadout value={`${totals.cpu.toFixed(1)}%`} label="cpu" />
+            </span>
+          )}
           <button className="btn-primary ml-1" onClick={onAdd}>
             <span className="text-base leading-none">+</span> New worker
           </button>
@@ -271,7 +337,7 @@ export function Dashboard({
               </p>
             ) : (
               sections.map(([name, list]) => (
-                <GroupSection key={name} name={name} workers={list} onOpen={onOpen} onEditWorker={onEditWorker ?? (() => {})} />
+                <GroupSection key={name} name={name} workers={list} stat={statByGroup.get(name)} onOpen={onOpen} onEditWorker={onEditWorker ?? (() => {})} />
               ))
             )}
           </div>

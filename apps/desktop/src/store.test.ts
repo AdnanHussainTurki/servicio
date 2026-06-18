@@ -39,6 +39,15 @@ describe("store", () => {
     expect(m[m.length - 1].ts).toBe(249);
   });
 
+  it("tracks latest metric per instance", () => {
+    useStore.getState().applyEvent({ kind: "metric", worker: "q", instance: 0, ts: 1, cpu: 2, mem: 100 });
+    useStore.getState().applyEvent({ kind: "metric", worker: "q", instance: 1, ts: 1, cpu: 3, mem: 200 });
+    useStore.getState().applyEvent({ kind: "metric", worker: "q", instance: 0, ts: 2, cpu: 5, mem: 150 });
+    const lm = useStore.getState().latestMetric["q"];
+    expect(lm[0]).toEqual({ cpu: 5, mem: 150 });
+    expect(lm[1]).toEqual({ cpu: 3, mem: 200 });
+  });
+
   it("sets and clears the last error", () => {
     useStore.getState().setError("boom");
     expect(useStore.getState().lastError).toBe("boom");

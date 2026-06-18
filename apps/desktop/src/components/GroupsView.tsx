@@ -1,28 +1,42 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "../store";
-import { api } from "../api";
+import { api, withError } from "../api";
 import type { WorkerStatus } from "../types";
+import { computeGroups, fmtMem, type GroupStat } from "../groupStats";
 import { worstState, styleFor, SIGNAL_OF } from "./status";
+import { Sparkline } from "./Sparkline";
 import { WorkerCard } from "./WorkerCard";
 
-const UNGROUPED = "Ungrouped";
-
-function groupOf(w: WorkerStatus): string {
-  const g = w.group?.trim();
-  return g ? g : UNGROUPED;
-}
+const MEM_HISTORY_CAP = 60;
 
 interface GroupBucket {
   name: string;
   workers: WorkerStatus[];
+  stat: GroupStat;
   running: number;
   warming: number;
   down: number;
   idle: number;
 }
 
+/** Fire start/stop/restart against a whole group; "Ungrouped" maps to the null group on the backend. */
+async function startAll(group: string) {
+  await withError(api.startGroup(group));
+}
+async function stopAll(group: string) {
+  await withError(api.stopGroup(group));
+}
+async function restartAll(group: string) {
+  await withError(
+    (async () => {
+      await api.stopGroup(group);
+      await api.startGroup(group);
+    })()
+  );
+}
+
 /** Roll a group's workers into signal-bucket counts (one bucket per worker, by its worst state). */
-function rollup(workers: WorkerStatus[]): Omit<GroupBucket, "name" | "workers"> {
+function rollup(workers: WorkerStatus[]): Omit<GroupBucket, "name" | "workers" | "stat"> {
   let running = 0,
     warming = 0,
     down = 0,
@@ -59,6 +73,99 @@ function RollupStat({ count, label, dot }: { count: number; label: string; dot: 
   );
 }
 
+/** Inline metric tile: value + unit, mono tabular — used on cards and drill-in. */
+function MetricTile({ value, label }: { value: string; label: string }) {
+  return (
+    <span className="inline-flex items-baseline gap-1">
+      <span className="font-mono text-xs font-semibold tabular-nums text-stone-700 dark:text-stone-200">
+        {value}
+      </span>
+      <span className="font-mono text-[10px] uppercase tracking-wide text-stone-400 dark:text-stone-500">
+        {label}
+      </span>
+    </span>
+  );
+}
+
+/** Live aggregate readout (mem · cpu · procs); hidden until at least one process reports. */
+function GroupMetrics({ stat }: { stat: GroupStat }) {
+  if (stat.processes === 0) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+      <MetricTile value={fmtMem(stat.mem)} label="mem" />
+      <span className="h-3 w-px bg-stone-200 dark:bg-white/10" aria-hidden />
+      <MetricTile value={`${stat.cpu.toFixed(1)}%`} label="cpu" />
+      <span className="h-3 w-px bg-stone-200 dark:bg-white/10" aria-hidden />
+      <MetricTile value={String(stat.processes)} label={stat.processes === 1 ? "proc" : "procs"} />
+    </div>
+  );
+}
+
+/**
+ * Bulk start/stop/restart for a whole group. stopPropagation lets these live on a
+ * clickable folder card without triggering drill-in. Stop confirms (it can take a
+ * whole group offline). `compact` shrinks them for the folder-card footer.
+ */
+function BulkActions({ group, count, compact = false }: { group: string; count: number; compact?: boolean }) {
+  const stop = (e: React.MouseEvent, fn: () => void) => {
+    e.stopPropagation();
+    e.preventDefault();
+    fn();
+  };
+  const base =
+    "inline-flex items-center gap-1 rounded-md font-mono font-medium ring-1 ring-inset transition " +
+    (compact ? "px-2 py-1 text-[10px] " : "px-2.5 py-1.5 text-[11px] ");
+  return (
+    <div className="flex items-center gap-1.5">
+      <button
+        type="button"
+        aria-label={`Start all in ${group}`}
+        title={`Start all in ${group}`}
+        onClick={(e) => stop(e, () => startAll(group))}
+        className={
+          base +
+          "bg-emerald-500/10 text-emerald-700 ring-emerald-500/25 hover:bg-emerald-500/20 " +
+          "dark:text-emerald-300"
+        }
+      >
+        <span aria-hidden>▶</span> Start all
+      </button>
+      <button
+        type="button"
+        aria-label={`Restart all in ${group}`}
+        title={`Restart all in ${group}`}
+        onClick={(e) => stop(e, () => restartAll(group))}
+        className={
+          base +
+          "bg-amber-400/10 text-amber-700 ring-amber-400/25 hover:bg-amber-400/20 " +
+          "dark:text-amber-300"
+        }
+      >
+        <span aria-hidden>↻</span> Restart all
+      </button>
+      <button
+        type="button"
+        aria-label={`Stop all in ${group}`}
+        title={`Stop all in ${group}`}
+        onClick={(e) =>
+          stop(e, () => {
+            if (window.confirm(`Stop ${count} ${count === 1 ? "worker" : "workers"} in "${group}"?`)) {
+              stopAll(group);
+            }
+          })
+        }
+        className={
+          base +
+          "bg-rose-500/10 text-rose-700 ring-rose-500/25 hover:bg-rose-500/20 " +
+          "dark:text-rose-300"
+        }
+      >
+        <span aria-hidden>■</span> Stop all
+      </button>
+    </div>
+  );
+}
+
 /** The dominant signal of a group drives the folder-tab accent color. */
 function tabAccent(g: GroupBucket): string {
   if (g.down > 0) return styleFor("crashed").rail;
@@ -70,10 +177,20 @@ function tabAccent(g: GroupBucket): string {
 function FolderCard({ group, onOpen }: { group: GroupBucket; onOpen: () => void }) {
   const accent = tabAccent(group);
   return (
-    <button
-      type="button"
+    // Not a <button> on purpose: it hosts the bulk-action buttons, and nesting
+    // interactive buttons is invalid HTML. A role="button" div keeps it clickable
+    // + keyboard-accessible without that conflict.
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onOpen}
-      className="group/folder relative block w-full text-left focus:outline-none"
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onOpen();
+        }
+      }}
+      className="group/folder relative block w-full cursor-pointer text-left focus:outline-none"
     >
       {/* protruding folder tab */}
       <span
@@ -116,8 +233,18 @@ function FolderCard({ group, onOpen }: { group: GroupBucket; onOpen: () => void 
           <RollupStat count={group.down} label="down" dot={styleFor("crashed").dot} />
           <RollupStat count={group.idle} label="idle" dot={styleFor("stopped").dot} />
         </div>
+
+        {group.stat.processes > 0 && (
+          <div className="mt-2.5">
+            <GroupMetrics stat={group.stat} />
+          </div>
+        )}
+
+        <div className="mt-3 border-t border-stone-100 pt-3 dark:border-white/[0.05]">
+          <BulkActions group={group.name} count={group.workers.length} compact />
+        </div>
       </div>
-    </button>
+    </div>
   );
 }
 
@@ -158,25 +285,21 @@ export function GroupsView({
   onAddWorker: () => void;
 }) {
   const workers = Object.values(useStore((s) => s.workers));
+  const latestMetric = useStore((s) => s.latestMetric);
   const [selected, setSelected] = useState<string | null>(null);
 
-  // group workers; "Ungrouped" sorted last, rest alphabetical
-  const groups = useMemo<GroupBucket[]>(() => {
-    const byGroup = new Map<string, WorkerStatus[]>();
-    for (const w of workers) {
-      const g = groupOf(w);
-      const list = byGroup.get(g) ?? [];
-      list.push(w);
-      byGroup.set(g, list);
-    }
-    return [...byGroup.entries()]
-      .sort(([a], [b]) => {
-        if (a === UNGROUPED) return 1;
-        if (b === UNGROUPED) return -1;
-        return a.localeCompare(b);
-      })
-      .map(([name, list]) => ({ name, workers: list, ...rollup(list) }));
-  }, [workers]);
+  // Order + per-group aggregates come from computeGroups (mem desc, Ungrouped last);
+  // we layer the signal-bucket rollup on top for the folder-tab accent.
+  const groups = useMemo<GroupBucket[]>(
+    () =>
+      computeGroups(workers, latestMetric).map((stat) => ({
+        name: stat.group,
+        workers: stat.workers,
+        stat,
+        ...rollup(stat.workers),
+      })),
+    [workers, latestMetric]
+  );
 
   if (workers.length === 0) {
     return (
@@ -191,42 +314,7 @@ export function GroupsView({
 
   // ── Drill-in: one group's worker cards ──────────────────────────────
   if (active) {
-    return (
-      <div className="flex h-full flex-col">
-        <header className="border-b border-stone-200/70 px-6 py-5 dark:border-white/[0.06]">
-          <button
-            type="button"
-            onClick={() => setSelected(null)}
-            className="font-mono text-xs text-stone-400 transition hover:text-signal-600 dark:text-stone-500 dark:hover:text-signal-400"
-          >
-            ← Groups
-          </button>
-          <div className="mt-2 flex flex-wrap items-baseline gap-3">
-            <h1 className="font-display text-2xl font-bold tracking-tight text-stone-900 dark:text-stone-50">
-              {active.name}
-            </h1>
-            <span className="font-mono text-xs text-stone-400 dark:text-stone-500">
-              {active.workers.length}{" "}
-              {active.workers.length === 1 ? "worker" : "workers"}
-            </span>
-          </div>
-        </header>
-        <div className="flex-1 overflow-auto p-6">
-          <div className="grid auto-rows-min grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {active.workers.map((w, i) => (
-              <div key={w.name} className="animate-riseIn" style={{ animationDelay: `${i * 40}ms` }}>
-                <WorkerCard
-                  w={w}
-                  onOpen={() => onOpenWorker(w.name)}
-                  onStart={() => void api.startWorker(w.name)}
-                  onStop={() => void api.stopWorker(w.name)}
-                />
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    );
+    return <GroupDrillIn group={active} onBack={() => setSelected(null)} onOpenWorker={onOpenWorker} />;
   }
 
   // ── Default: grid of folder cards ───────────────────────────────────
@@ -241,6 +329,91 @@ export function GroupsView({
           {groups.map((g, i) => (
             <div key={g.name} className="animate-riseIn" style={{ animationDelay: `${i * 40}ms` }}>
               <FolderCard group={g} onOpen={() => setSelected(g.name)} />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Drill-in view for one group: bulk actions, a rolling total-memory sparkline,
+ * current mem/cpu/process tiles, then the per-worker cards. The sparkline keeps
+ * its own capped history, sampled whenever the group's total memory changes.
+ */
+function GroupDrillIn({
+  group,
+  onBack,
+  onOpenWorker,
+}: {
+  group: GroupBucket;
+  onBack: () => void;
+  onOpenWorker: (name: string) => void;
+}) {
+  const { stat } = group;
+  const [memHistory, setMemHistory] = useState<number[]>([]);
+  const lastMem = useRef<number | null>(null);
+
+  // append the current total mem whenever it changes (cap at MEM_HISTORY_CAP)
+  useEffect(() => {
+    if (stat.processes === 0) return;
+    if (lastMem.current === stat.mem) return;
+    lastMem.current = stat.mem;
+    setMemHistory((h) => {
+      const next = [...h, stat.mem];
+      if (next.length > MEM_HISTORY_CAP) next.splice(0, next.length - MEM_HISTORY_CAP);
+      return next;
+    });
+  }, [stat.mem, stat.processes]);
+
+  return (
+    <div className="flex h-full flex-col">
+      <header className="border-b border-stone-200/70 px-6 py-5 dark:border-white/[0.06]">
+        <button
+          type="button"
+          onClick={onBack}
+          className="font-mono text-xs text-stone-400 transition hover:text-signal-600 dark:text-stone-500 dark:hover:text-signal-400"
+        >
+          ← Groups
+        </button>
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-baseline gap-3">
+            <h1 className="font-display text-2xl font-bold tracking-tight text-stone-900 dark:text-stone-50">
+              {group.name}
+            </h1>
+            <span className="font-mono text-xs text-stone-400 dark:text-stone-500">
+              {group.workers.length} {group.workers.length === 1 ? "worker" : "workers"}
+            </span>
+          </div>
+          <BulkActions group={group.name} count={group.workers.length} />
+        </div>
+
+        {stat.processes > 0 && (
+          <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-3">
+            <div className="text-signal-600 dark:text-signal-400" style={{ minWidth: 180, maxWidth: 280 }}>
+              <Sparkline data={memHistory.length ? memHistory : [stat.mem]} stroke="currentColor" />
+            </div>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+              <MetricTile value={fmtMem(stat.mem)} label="mem" />
+              <span className="h-3 w-px bg-stone-200 dark:bg-white/10" aria-hidden />
+              <MetricTile value={`${stat.cpu.toFixed(1)}%`} label="cpu" />
+              <span className="h-3 w-px bg-stone-200 dark:bg-white/10" aria-hidden />
+              <MetricTile value={String(stat.processes)} label={stat.processes === 1 ? "proc" : "procs"} />
+            </div>
+          </div>
+        )}
+      </header>
+      <div className="flex-1 overflow-auto p-6">
+        <div className="grid auto-rows-min grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          {group.workers.map((w, i) => (
+            <div key={w.name} className="animate-riseIn" style={{ animationDelay: `${i * 40}ms` }}>
+              <WorkerCard
+                w={w}
+                onOpen={() => onOpenWorker(w.name)}
+                onStart={() => void api.startWorker(w.name)}
+                onStop={() => void api.stopWorker(w.name)}
+              />
             </div>
           ))}
         </div>
