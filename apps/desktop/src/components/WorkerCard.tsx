@@ -30,6 +30,10 @@ export function WorkerCard({
   const s = styleFor(state);
   const restarts = w.instances.reduce((n, i) => n + i.restart_count, 0);
   const running = w.instances.filter((i) => i.state === "running").length;
+  const tags = w.tags ?? [];
+  const TAG_CAP = 4;
+  const shownTags = tags.slice(0, TAG_CAP);
+  const overflow = tags.length - shownTags.length;
 
   return (
     <div
@@ -69,6 +73,30 @@ export function WorkerCard({
           <Metric label="restarts" value={String(restarts)} />
           <Metric label="conc" value={`×${w.run_mode.concurrency}`} />
         </div>
+
+        {tags.length > 0 && (
+          <div className="mt-3 flex flex-wrap items-center gap-1.5">
+            {shownTags.map((t) => (
+              <span
+                key={t}
+                className="rounded font-mono text-[10px] font-medium tracking-wide text-stone-500
+                  ring-1 ring-inset ring-stone-300/70 px-1.5 py-0.5
+                  dark:text-stone-400 dark:ring-white/10"
+              >
+                {t}
+              </span>
+            ))}
+            {overflow > 0 && (
+              <span
+                className="rounded font-mono text-[10px] font-medium tracking-wide text-signal-600
+                  ring-1 ring-inset ring-signal-500/30 bg-signal-500/[0.06] px-1.5 py-0.5
+                  dark:text-signal-400"
+              >
+                +{overflow}
+              </span>
+            )}
+          </div>
+        )}
 
         <div
           className="mt-4 flex gap-2 opacity-0 transition group-hover:opacity-100 group-focus-within:opacity-100"

@@ -1,6 +1,15 @@
+import { useMemo, useState } from "react";
 import { useStore } from "../store";
 import { api, withError } from "../api";
+import type { WorkerStatus } from "../types";
 import { WorkerCard } from "./WorkerCard";
+
+const UNGROUPED = "Ungrouped";
+
+function groupOf(w: WorkerStatus): string {
+  const g = w.group?.trim();
+  return g ? g : UNGROUPED;
+}
 
 function SummaryChip({
   tone,
@@ -52,6 +61,97 @@ function EmptyState({ onAdd }: { onAdd: () => void }) {
   );
 }
 
+/** Toggle chip for the tag filter bar. */
+function TagFilterChip({
+  tag,
+  active,
+  onToggle,
+}: {
+  tag: string;
+  active: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-pressed={active}
+      className={
+        "rounded-full px-3 py-1 font-mono text-[11px] font-medium tracking-wide ring-1 ring-inset transition " +
+        (active
+          ? "bg-signal-500 text-white ring-signal-400 shadow-sm"
+          : "bg-white/60 text-stone-500 ring-stone-300/70 hover:text-stone-800 hover:ring-stone-400 " +
+            "dark:bg-white/[0.03] dark:text-stone-400 dark:ring-white/10 dark:hover:text-stone-200")
+      }
+    >
+      {tag}
+    </button>
+  );
+}
+
+function WorkerGrid({
+  workers,
+  onOpen,
+}: {
+  workers: WorkerStatus[];
+  onOpen: (name: string) => void;
+}) {
+  return (
+    <div className="grid auto-rows-min grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      {workers.map((w, i) => (
+        <div key={w.name} className="animate-riseIn" style={{ animationDelay: `${i * 40}ms` }}>
+          <WorkerCard
+            w={w}
+            onOpen={() => onOpen(w.name)}
+            onStart={() => withError(api.startWorker(w.name))}
+            onStop={() => withError(api.stopWorker(w.name))}
+          />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function GroupSection({
+  name,
+  workers,
+  onOpen,
+}: {
+  name: string;
+  workers: WorkerStatus[];
+  onOpen: (name: string) => void;
+}) {
+  const [open, setOpen] = useState(true);
+  return (
+    <section>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className="group/sec mb-3 flex w-full items-center gap-2.5 text-left"
+      >
+        <span
+          className={
+            "font-mono text-xs text-stone-400 transition-transform dark:text-stone-500 " +
+            (open ? "rotate-90" : "rotate-0")
+          }
+          aria-hidden
+        >
+          ▸
+        </span>
+        <h2 className="font-display text-sm font-semibold uppercase tracking-[0.14em] text-stone-600 dark:text-stone-300">
+          {name}
+        </h2>
+        <span className="rounded-full bg-stone-500/10 px-2 py-0.5 font-mono text-[10px] font-semibold tabular-nums text-stone-500 dark:bg-white/[0.05] dark:text-stone-400">
+          {workers.length}
+        </span>
+        <span className="ml-1 h-px flex-1 bg-stone-200/70 dark:bg-white/[0.06]" aria-hidden />
+      </button>
+      {open && <WorkerGrid workers={workers} onOpen={onOpen} />}
+    </section>
+  );
+}
+
 export function Dashboard({
   onOpen,
   onAdd,
@@ -60,6 +160,8 @@ export function Dashboard({
   onAdd: () => void;
 }) {
   const workers = Object.values(useStore((s) => s.workers));
+  const [activeTags, setActiveTags] = useState<Set<string>>(new Set());
+
   const running = workers.filter((w) => w.instances.some((i) => i.state === "running")).length;
   const warming = workers.filter((w) =>
     w.instances.some((i) => ["starting", "backoff", "stopping"].includes(i.state))
@@ -68,6 +170,46 @@ export function Dashboard({
   const down = workers.filter((w) =>
     w.instances.some((i) => i.state === "crashed" || i.state === "failed")
   ).length;
+
+  // distinct tags across all workers, sorted
+  const allTags = useMemo(() => {
+    const set = new Set<string>();
+    for (const w of workers) for (const t of w.tags ?? []) set.add(t);
+    return [...set].sort((a, b) => a.localeCompare(b));
+  }, [workers]);
+
+  // OR filter: a worker matches if it carries ANY active tag
+  const visible = useMemo(() => {
+    if (activeTags.size === 0) return workers;
+    return workers.filter((w) => (w.tags ?? []).some((t) => activeTags.has(t)));
+  }, [workers, activeTags]);
+
+  // group visible workers; "Ungrouped" sorted last, rest alphabetical
+  const sections = useMemo(() => {
+    const byGroup = new Map<string, WorkerStatus[]>();
+    for (const w of visible) {
+      const g = groupOf(w);
+      const list = byGroup.get(g) ?? [];
+      list.push(w);
+      byGroup.set(g, list);
+    }
+    return [...byGroup.entries()].sort(([a], [b]) => {
+      if (a === UNGROUPED) return 1;
+      if (b === UNGROUPED) return -1;
+      return a.localeCompare(b);
+    });
+  }, [visible]);
+
+  function toggleTag(tag: string) {
+    setActiveTags((prev) => {
+      const next = new Set(prev);
+      if (next.has(tag)) next.delete(tag);
+      else next.add(tag);
+      return next;
+    });
+  }
+
+  const filterActive = activeTags.size > 0;
 
   return (
     <div className="flex h-full flex-col">
@@ -94,17 +236,38 @@ export function Dashboard({
       {workers.length === 0 ? (
         <EmptyState onAdd={onAdd} />
       ) : (
-        <div className="grid auto-rows-min grid-cols-1 gap-4 p-6 sm:grid-cols-2 xl:grid-cols-3">
-          {workers.map((w, i) => (
-            <div key={w.name} className="animate-riseIn" style={{ animationDelay: `${i * 40}ms` }}>
-              <WorkerCard
-                w={w}
-                onOpen={() => onOpen(w.name)}
-                onStart={() => withError(api.startWorker(w.name))}
-                onStop={() => withError(api.stopWorker(w.name))}
-              />
+        <div className="flex-1 overflow-auto">
+          {allTags.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2 border-b border-stone-200/60 px-6 py-3 dark:border-white/[0.05]">
+              <span className="mr-1 font-mono text-[10px] uppercase tracking-[0.16em] text-stone-400 dark:text-stone-500">
+                filter
+              </span>
+              {allTags.map((t) => (
+                <TagFilterChip key={t} tag={t} active={activeTags.has(t)} onToggle={() => toggleTag(t)} />
+              ))}
+              {filterActive && (
+                <button
+                  type="button"
+                  onClick={() => setActiveTags(new Set())}
+                  className="ml-1 font-mono text-[11px] text-stone-500 underline-offset-4 transition hover:text-signal-600 hover:underline dark:hover:text-signal-400"
+                >
+                  clear
+                </button>
+              )}
             </div>
-          ))}
+          )}
+
+          <div className="space-y-8 p-6">
+            {sections.length === 0 ? (
+              <p className="rounded-lg border border-dashed border-stone-300 bg-white/40 px-4 py-8 text-center text-sm text-stone-500 dark:border-white/10 dark:bg-white/[0.02] dark:text-stone-400">
+                No workers match the active tag filter.
+              </p>
+            ) : (
+              sections.map(([name, list]) => (
+                <GroupSection key={name} name={name} workers={list} onOpen={onOpen} />
+              ))
+            )}
+          </div>
         </div>
       )}
     </div>
