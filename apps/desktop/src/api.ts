@@ -25,6 +25,7 @@ export const api = {
   stopWorker: (name: string) => invoke<void>("stop_worker", { name }),
   restartWorker: (name: string) => invoke<void>("restart_worker", { name }),
   addWorker: (spec: AddWorkerSpec) => invoke<void>("add_worker", { spec }),
+  getWorker: (name: string) => invoke<any>("get_worker", { name }),
   detectWorkers: (path: string) => invoke<SuggestionDraft[]>("detect_workers", { path }),
   metrics: (worker: string, sinceSecs: number) => invoke<{ instance: number; points: MetricPointT[] }[]>("metrics", { worker, sinceSecs }),
   serviceStatus: () => invoke<{ installed: boolean; supported?: boolean }>("service_status"),

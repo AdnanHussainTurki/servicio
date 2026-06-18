@@ -6,12 +6,43 @@ import { StatusFooter } from "./components/StatusFooter";
 import { Dashboard } from "./components/Dashboard";
 import { WorkerDetail } from "./components/WorkerDetail";
 import { CreateFlow } from "./components/CreateFlow";
+import type { EditSpec } from "./components/CreateFlow";
 import { SettingsView } from "./components/SettingsView";
 
 export default function App() {
   const [view, setView] = useState("dashboard");
   const [detail, setDetail] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  const [editing, setEditing] = useState<string | null>(null);
+  const [editSpec, setEditSpec] = useState<EditSpec | null>(null);
+
+  // When an edit is requested, fetch the full spec from the daemon. Guarded so a
+  // failed fetch (or dev browser without Tauri) never crashes the app.
+  useEffect(() => {
+    if (!editing) {
+      setEditSpec(null);
+      return;
+    }
+    let alive = true;
+    (async () => {
+      try {
+        const spec = await api.getWorker(editing);
+        if (alive) setEditSpec(spec as EditSpec);
+      } catch (err) {
+        if (alive) {
+          useStore.getState().setError(`Could not load "${editing}" for editing: ${String(err)}`);
+          setEditing(null);
+        }
+      }
+    })();
+    return () => { alive = false; };
+  }, [editing]);
+
+  function closeFlow() {
+    setAdding(false);
+    setEditing(null);
+    setEditSpec(null);
+  }
 
   useEffect(() => {
     subscribeEvents().catch(() => {});
@@ -52,14 +83,23 @@ export default function App() {
           {view === "settings" ? (
             <SettingsView />
           ) : adding ? (
-            <CreateFlow
-              onDone={() => setAdding(false)}
-              onCancel={() => setAdding(false)}
-            />
+            <CreateFlow onDone={closeFlow} onCancel={closeFlow} />
+          ) : editing ? (
+            editSpec ? (
+              <CreateFlow editWorker={editSpec} onDone={closeFlow} onCancel={closeFlow} />
+            ) : (
+              <div className="p-8 font-mono text-sm text-stone-400 dark:text-stone-500">
+                Loading {editing}…
+              </div>
+            )
           ) : detail ? (
-            <WorkerDetail name={detail} onBack={() => setDetail(null)} />
+            <WorkerDetail name={detail} onBack={() => setDetail(null)} onEdit={() => setEditing(detail)} />
           ) : (
-            <Dashboard onOpen={setDetail} onAdd={() => setAdding(true)} />
+            <Dashboard
+              onOpen={setDetail}
+              onAdd={() => setAdding(true)}
+              onEditWorker={(name) => setEditing(name)}
+            />
           )}
         </main>
       </div>

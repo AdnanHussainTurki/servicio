@@ -6,7 +6,7 @@ import { StatusDot } from "./StatusDot";
 import { worstState, styleFor } from "./status";
 import { useState } from "react";
 
-export function WorkerDetail({ name, onBack }: { name: string; onBack: () => void }) {
+export function WorkerDetail({ name, onBack, onEdit }: { name: string; onBack: () => void; onEdit?: () => void }) {
   const w = useStore((s) => s.workers[name]);
   const [tab, setTab] = useState<"logs" | "metrics" | "config">("logs");
 
@@ -75,6 +75,9 @@ export function WorkerDetail({ name, onBack }: { name: string; onBack: () => voi
             </button>
             <button className="btn-ghost" onClick={() => withError(api.restartWorker(name))}>
               ↻ Restart
+            </button>
+            <button className="btn-ghost" onClick={() => onEdit?.()}>
+              ✎ Edit
             </button>
           </div>
         </div>
