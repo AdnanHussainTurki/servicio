@@ -1,5 +1,6 @@
 use crate::error::CoreError;
 use crate::worker::WorkerSpec;
+use std::path::Path;
 use std::process::ExitStatus;
 use tokio::io::AsyncRead;
 use tokio::process::{Child, Command};
@@ -54,7 +55,10 @@ impl ProcessSpawner for TokioProcess {
         let mut cmd = Command::new(&spec.command);
         cmd.args(&spec.args)
             .current_dir(&spec.working_dir)
-            .env_clear()
+            // Inherit the daemon env (PATH/HOME propagate to children), then overlay the
+            // worker's own vars. Augment PATH so project-local + Homebrew/nvm tools resolve
+            // even when the daemon was launched with a minimal PATH (e.g. from Finder).
+            .env("PATH", augmented_path(&spec.working_dir, spec.env.get("PATH")))
             .envs(&spec.env)
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
@@ -64,6 +68,30 @@ impl ProcessSpawner for TokioProcess {
         let stderr = child.stderr.take().map(|s| Box::new(s) as Box<dyn AsyncRead + Unpin + Send>);
         Ok(Spawned { child, stdout, stderr })
     }
+}
+
+/// Build a PATH including project-local tool dirs + common install locations + the inherited
+/// PATH, so worker commands resolve even under a minimal daemon PATH. A user-provided PATH in
+/// the worker's env wins outright.
+fn augmented_path(working_dir: &Path, user_path: Option<&String>) -> String {
+    if let Some(p) = user_path {
+        return p.clone();
+    }
+    let mut parts: Vec<String> = Vec::new();
+    parts.push(working_dir.join("node_modules/.bin").display().to_string());
+    parts.push(working_dir.join("vendor/bin").display().to_string());
+    for d in ["/opt/homebrew/bin", "/opt/homebrew/sbin", "/usr/local/bin", "/usr/local/sbin"] {
+        parts.push(d.to_string());
+    }
+    if let Some(home) = std::env::var_os("HOME") {
+        parts.push(Path::new(&home).join(".cargo/bin").display().to_string());
+        parts.push(Path::new(&home).join(".local/bin").display().to_string());
+    }
+    match std::env::var("PATH") {
+        Ok(p) if !p.is_empty() => parts.push(p),
+        _ => parts.push("/usr/bin:/bin:/usr/sbin:/sbin".to_string()),
+    }
+    parts.join(":")
 }
 
 #[cfg(test)]
@@ -114,5 +142,36 @@ mod tests {
         s.working_dir = PathBuf::from("/no/such/dir/servicio-xyz");
         let err = TokioProcess.spawn(&s).unwrap_err();
         assert!(matches!(err, CoreError::MissingWorkingDir(_)));
+    }
+
+    #[tokio::test]
+    async fn resolves_project_local_binary_via_augmented_path() {
+        let dir = tempfile::tempdir().unwrap();
+        let bin = dir.path().join("node_modules/.bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        let tool = bin.join("mytool");
+        std::fs::write(&tool, "#!/bin/sh\necho ok\n").unwrap();
+        #[cfg(unix)]
+        { use std::os::unix::fs::PermissionsExt; std::fs::set_permissions(&tool, std::fs::Permissions::from_mode(0o755)).unwrap(); }
+        let spec = WorkerSpec {
+            name: "t".into(), command: "mytool".into(), args: vec![],
+            working_dir: dir.path().to_path_buf(), env: std::collections::BTreeMap::new(),
+            run_mode: crate::worker::RunMode::Daemon { concurrency: 1 },
+            restart: crate::worker::RestartPolicy::default(), autostart: false, enabled: true,
+            group: None, tags: vec![],
+        };
+        let mut sp = TokioProcess.spawn(&spec).unwrap();
+        let mut out = String::new();
+        use tokio::io::AsyncReadExt;
+        sp.stdout.take().unwrap().read_to_string(&mut out).await.unwrap();
+        assert!(out.contains("ok"), "got: {out}");
+    }
+
+    #[test]
+    fn augmented_path_includes_local_and_brew() {
+        let p = augmented_path(std::path::Path::new("/proj"), None);
+        assert!(p.contains("/proj/node_modules/.bin"));
+        assert!(p.contains("/opt/homebrew/bin"));
+        assert_eq!(augmented_path(std::path::Path::new("/proj"), Some(&"/custom".to_string())), "/custom");
     }
 }
