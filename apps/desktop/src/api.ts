@@ -3,6 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import type { WorkerStatus, DaemonStatus, WorkerEvent, RunMode, SuggestionDraft, MetricPointT } from "./types";
 import { useStore } from "./store";
 import { notifyStateEvent } from "./notify";
+import type { EditSpec } from "./components/CreateFlow";
 
 export interface AddWorkerSpec {
   name: string;
@@ -31,7 +32,7 @@ export const api = {
   removeWorker: (name: string) => invoke<void>("remove_worker", { name }),
   exportWorkersTo: (path: string) => invoke<number>("export_workers_to", { path }),
   importWorkersFrom: (path: string) => invoke<number>("import_workers_from", { path }),
-  getWorker: (name: string) => invoke<any>("get_worker", { name }),
+  getWorker: (name: string) => invoke<EditSpec>("get_worker", { name }),
   detectWorkers: (path: string) => invoke<SuggestionDraft[]>("detect_workers", { path }),
   metrics: (worker: string, sinceSecs: number) => invoke<{ instance: number; points: MetricPointT[] }[]>("metrics", { worker, sinceSecs }),
   serviceStatus: () => invoke<{ installed: boolean; supported?: boolean }>("service_status"),

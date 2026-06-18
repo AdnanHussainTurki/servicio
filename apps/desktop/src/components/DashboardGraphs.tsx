@@ -1,37 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useStore } from "../store";
 import { fmtMem } from "../groupStats";
+import { computeTotals } from "../dashboardTotals";
 import { Sparkline } from "./Sparkline";
-import type { WorkerStatus } from "../types";
 
 const CPU_STROKE = "#f97316"; // copper signal
 const MEM_STROKE = "#38bdf8"; // telemetry cyan
 const HISTORY_CAP = 60;
-
-/**
- * Sum the latest per-instance CPU% and memory across every worker/instance.
- * Only instances that have reported a metric contribute.
- */
-export function computeTotals(
-  workers: WorkerStatus[],
-  latest: Record<string, Record<number, { cpu: number; mem: number }>>,
-): { cpu: number; mem: number; samples: number } {
-  let cpu = 0;
-  let mem = 0;
-  let samples = 0;
-  for (const w of workers) {
-    const lm = latest[w.name] ?? {};
-    for (const inst of w.instances) {
-      const m = lm[inst.index];
-      if (m) {
-        cpu += m.cpu;
-        mem += m.mem;
-        samples += 1;
-      }
-    }
-  }
-  return { cpu, mem, samples };
-}
 
 /** A wide instrument panel: label, big current value, area chart. */
 function GraphPanel({
@@ -86,11 +61,20 @@ export function DashboardGraphs() {
   const [memHist, setMemHist] = useState<number[]>([]);
 
   // Append a sample to the rolling history whenever the totals change. We key the
-  // effect on the numeric totals (not object identity) so it only fires on real moves.
+  // effect on the numeric totals (not object identity) so it only fires on real
+  // moves. The append is deferred to a microtask so it reads as an async update
+  // (sampling an external time series) rather than a synchronous render cascade.
   useEffect(() => {
     if (totals.samples === 0) return;
-    setCpuHist((h) => [...h, totals.cpu].slice(-HISTORY_CAP));
-    setMemHist((h) => [...h, totals.mem].slice(-HISTORY_CAP));
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setCpuHist((h) => [...h, totals.cpu].slice(-HISTORY_CAP));
+      setMemHist((h) => [...h, totals.mem].slice(-HISTORY_CAP));
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [totals.cpu, totals.mem, totals.samples]);
 
   const hasData = totals.samples > 0;
