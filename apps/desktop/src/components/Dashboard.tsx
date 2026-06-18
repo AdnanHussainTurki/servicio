@@ -4,6 +4,7 @@ import { api, withError } from "../api";
 import type { WorkerStatus } from "../types";
 import { computeGroups, fmtMem, type GroupStat } from "../groupStats";
 import { WorkerCard } from "./WorkerCard";
+import { DashboardGraphs } from "./DashboardGraphs";
 
 const UNGROUPED = "Ungrouped";
 
@@ -317,6 +318,7 @@ export function Dashboard({
         <EmptyState onAdd={onAdd} />
       ) : (
         <div className="flex-1 overflow-auto">
+          <DashboardGraphs />
           {allTags.length > 0 && (
             <div className="flex flex-wrap items-center gap-2 border-b border-stone-200/60 px-6 py-3 dark:border-white/[0.05]">
               <span className="mr-1 font-mono text-[10px] uppercase tracking-[0.16em] text-stone-400 dark:text-stone-500">
