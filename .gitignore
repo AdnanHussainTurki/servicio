@@ -13,3 +13,4 @@ apps/desktop/src-tauri/binaries/
 .playwright-mcp/
 /*.png
 .secrets/
+.claude/
