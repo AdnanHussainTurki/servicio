@@ -97,23 +97,32 @@ fn augmented_path(working_dir: &Path, user_path: Option<&String>) -> String {
     let mut parts: Vec<String> = Vec::new();
     parts.push(working_dir.join("node_modules/.bin").display().to_string());
     parts.push(working_dir.join("vendor/bin").display().to_string());
-    for d in [
-        "/opt/homebrew/bin",
-        "/opt/homebrew/sbin",
-        "/usr/local/bin",
-        "/usr/local/sbin",
-    ] {
-        parts.push(d.to_string());
-    }
-    if let Some(home) = std::env::var_os("HOME") {
-        parts.push(Path::new(&home).join(".cargo/bin").display().to_string());
-        parts.push(Path::new(&home).join(".local/bin").display().to_string());
+    // Unix install locations (Homebrew, /usr/local, ~/.cargo, ~/.local). On
+    // Windows these don't exist; the inherited PATH already carries tool dirs.
+    #[cfg(unix)]
+    {
+        for d in [
+            "/opt/homebrew/bin",
+            "/opt/homebrew/sbin",
+            "/usr/local/bin",
+            "/usr/local/sbin",
+        ] {
+            parts.push(d.to_string());
+        }
+        if let Some(home) = std::env::var_os("HOME") {
+            parts.push(Path::new(&home).join(".cargo/bin").display().to_string());
+            parts.push(Path::new(&home).join(".local/bin").display().to_string());
+        }
     }
     match std::env::var("PATH") {
         Ok(p) if !p.is_empty() => parts.push(p),
+        #[cfg(unix)]
         _ => parts.push("/usr/bin:/bin:/usr/sbin:/sbin".to_string()),
+        #[cfg(not(unix))]
+        _ => {}
     }
-    parts.join(":")
+    let sep = if cfg!(windows) { ";" } else { ":" };
+    parts.join(sep)
 }
 
 #[cfg(test)]

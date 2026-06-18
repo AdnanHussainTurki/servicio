@@ -16,12 +16,12 @@ pub fn event_payload(frame: &Frame) -> Option<Value> {
 }
 
 /// Subscribe to state+log and call `emit` for each mapped payload until the stream closes.
-pub async fn run_event_pump<F>(socket: std::path::PathBuf, token: String, emit: F)
+pub async fn run_event_pump<F>(base: std::path::PathBuf, token: String, emit: F)
 where
     F: Fn(Value) + Send + 'static,
 {
     use servicio_cli_lib::Client;
-    let client = match Client::connect(&socket, &token).await {
+    let client = match Client::connect(&base, &token).await {
         Ok(c) => c,
         Err(_) => return,
     };

@@ -10,11 +10,11 @@ pub struct AppState {
 }
 
 impl AppState {
-    pub async fn connect(socket: &Path, token: &str) -> Result<Self> {
-        let client = Client::connect(socket, token).await?;
+    pub async fn connect(base: &Path, token: &str) -> Result<Self> {
+        let client = Client::connect(base, token).await?;
         Ok(Self {
             client: Mutex::new(client),
-            base: socket.parent().unwrap_or(Path::new("/")).to_path_buf(),
+            base: base.to_path_buf(),
             token: token.to_string(),
         })
     }

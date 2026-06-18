@@ -52,13 +52,12 @@ fn base_dir(arg: Option<PathBuf>) -> PathBuf {
 async fn main() -> Result<()> {
     let cli = Cli::parse();
     let base = base_dir(cli.base);
-    let socket = base.join("daemon.sock");
     let token = std::fs::read_to_string(base.join("token"))
         .context("reading token (is the daemon running?)")?
         .trim()
         .to_string();
 
-    let mut client = Client::connect(&socket, &token)
+    let mut client = Client::connect(&base, &token)
         .await
         .context("connecting to daemon")?;
 

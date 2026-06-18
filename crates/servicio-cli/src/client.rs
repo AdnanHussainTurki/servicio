@@ -2,24 +2,22 @@
 
 use anyhow::{anyhow, Result};
 use serde_json::{json, Value};
+use servicio_ipc::transport::{self, ClientRead, ClientWrite};
 use servicio_ipc::types::WorkerStatus;
 use servicio_ipc::Frame;
 use std::path::Path;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, Lines};
-use tokio::net::unix::{OwnedReadHalf, OwnedWriteHalf};
-use tokio::net::UnixStream;
 
 pub struct Client {
-    wr: OwnedWriteHalf,
-    lines: Lines<BufReader<OwnedReadHalf>>,
+    wr: ClientWrite,
+    lines: Lines<BufReader<ClientRead>>,
     next_id: u64,
 }
 
 impl Client {
-    /// Connect and perform the `hello` handshake.
-    pub async fn connect(socket: &Path, token: &str) -> Result<Self> {
-        let stream = UnixStream::connect(socket).await?;
-        let (rd, wr) = stream.into_split();
+    /// Connect to the daemon for `base` and perform the `hello` handshake.
+    pub async fn connect(base: &Path, token: &str) -> Result<Self> {
+        let (rd, wr) = transport::connect(&transport::endpoint(base)).await?;
         let lines = BufReader::new(rd).lines();
         let mut c = Client {
             wr,
@@ -149,7 +147,7 @@ impl Client {
         mut self,
         topics: &[&str],
         worker: Option<&str>,
-    ) -> Result<Lines<BufReader<OwnedReadHalf>>> {
+    ) -> Result<Lines<BufReader<ClientRead>>> {
         let id = self.next_id;
         let params = json!({ "topics": topics, "worker": worker });
         let frame = Frame::Request {

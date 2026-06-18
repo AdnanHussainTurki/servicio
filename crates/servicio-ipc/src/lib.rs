@@ -1,6 +1,7 @@
 //! servicio-ipc: the wire protocol shared by the daemon and clients.
-//! Pure types + line framing. No tokio, no IO.
+//! Line framing + types, plus the platform transport (Unix socket / Windows pipe).
 
+pub mod transport;
 pub mod types;
 
 use serde::{Deserialize, Serialize};
