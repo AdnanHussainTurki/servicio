@@ -12,12 +12,14 @@ pub enum InstanceState {
     Stopping,
     Crashed,
     Backoff,
+    Idle,
+    Completed,
     Failed,
 }
 
 impl InstanceState {
     pub fn is_terminal(self) -> bool {
-        matches!(self, InstanceState::Stopped | InstanceState::Failed)
+        matches!(self, InstanceState::Stopped | InstanceState::Failed | InstanceState::Completed)
     }
 
     pub fn can_transition_to(self, to: InstanceState) -> bool {
@@ -37,6 +39,12 @@ impl InstanceState {
                 | (Running, Stopped)
                 | (Stopped, Failed)
                 | (Starting, Stopped)
+                | (Running, Idle)
+                | (Idle, Starting)
+                | (Idle, Stopped)
+                | (Running, Completed)
+                | (Starting, Completed)
+                | (Stopped, Idle)
         )
     }
 
@@ -83,5 +91,22 @@ mod tests {
         assert!(InstanceState::Stopped.is_terminal());
         assert!(InstanceState::Failed.is_terminal());
         assert!(!InstanceState::Running.is_terminal());
+    }
+
+    #[test]
+    fn scheduled_idle_run_cycle_is_legal() {
+        assert!(InstanceState::Running.can_transition_to(InstanceState::Idle));
+        assert!(InstanceState::Idle.can_transition_to(InstanceState::Starting));
+    }
+
+    #[test]
+    fn scheduled_first_idle_from_stopped_is_legal() {
+        assert!(InstanceState::Stopped.can_transition_to(InstanceState::Idle));
+    }
+
+    #[test]
+    fn batch_completion_is_terminal() {
+        assert!(InstanceState::Running.can_transition_to(InstanceState::Completed));
+        assert!(InstanceState::Completed.is_terminal());
     }
 }

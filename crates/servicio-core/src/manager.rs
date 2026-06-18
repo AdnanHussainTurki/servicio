@@ -42,6 +42,7 @@ impl Manager {
         }
         let concurrency = match spec.run_mode {
             RunMode::Daemon { concurrency } => concurrency.max(1),
+            RunMode::Scheduled { .. } | RunMode::Batch { .. } => 1,
         };
         let mut supervisors = Vec::new();
         let mut handles = Vec::new();
@@ -137,6 +138,19 @@ mod tests {
         let mut mgr = Manager::new(Arc::new(TokioProcess), dir.path().to_path_buf());
         mgr.start_worker(long_running("q")).await;
         assert_eq!(mgr.instance_count("q"), 2);
+        mgr.stop_all().await;
+    }
+
+    #[tokio::test]
+    async fn batch_worker_starts_single_instance() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut mgr = Manager::new(Arc::new(TokioProcess), dir.path().to_path_buf());
+        let mut s = long_running("b");
+        s.run_mode = RunMode::Batch { run_count: 2, delay_secs: 0 };
+        s.command = "sh".into();
+        s.args = vec!["-c".into(), "true".into()];
+        mgr.start_worker(s).await;
+        assert_eq!(mgr.instance_count("b"), 1);
         mgr.stop_all().await;
     }
 

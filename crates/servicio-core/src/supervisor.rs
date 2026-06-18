@@ -3,7 +3,7 @@ use crate::event::SupervisorEvent;
 use crate::logsink::LogSink;
 use crate::process::ProcessSpawner;
 use crate::state::InstanceState;
-use crate::worker::{RestartKind, WorkerSpec};
+use crate::worker::{OverlapPolicy, RestartKind, RunMode, Schedule, WorkerSpec};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::Duration;
@@ -113,8 +113,99 @@ impl InstanceSupervisor {
         )
     }
 
-    /// Run the spawn/monitor/restart loop until the instance reaches a terminal state.
+    /// Dispatch to the appropriate run loop based on this worker's run mode.
     pub async fn run_until_terminal(&self) {
+        match self.spec.run_mode.clone() {
+            RunMode::Daemon { .. } => self.run_daemon().await,
+            RunMode::Scheduled { schedule, overlap } => self.run_scheduled(&schedule, overlap).await,
+            RunMode::Batch { run_count, delay_secs } => self.run_batch(run_count, delay_secs).await,
+        }
+    }
+
+    /// Spawn the process once, pump stdout/stderr concurrently, wait for exit.
+    ///
+    /// Sets `Starting → Running` (or `Crashed` on spawn failure) and tracks pid.
+    /// Does NOT decide a post-exit terminal state — the caller (daemon/batch/
+    /// scheduled loop) owns restart/completion bookkeeping. Returns true on a
+    /// successful exit (status 0), false on failure or spawn error.
+    async fn run_once(&self, sink: &std::sync::Arc<std::sync::Mutex<LogSink>>) -> bool {
+        self.set_state(InstanceState::Starting);
+
+        let mut spawned = match self.spawner.spawn(&self.spec) {
+            Ok(s) => s,
+            Err(_) => {
+                self.set_state(InstanceState::Crashed);
+                return false;
+            }
+        };
+        self.set_state(InstanceState::Running);
+        self.pid.store(spawned.pid().unwrap_or(0), Ordering::SeqCst);
+
+        // Drain stdout AND stderr concurrently with waiting for exit, so a
+        // long-running worker that holds its pipes open does not block exit
+        // detection, and a chatty stderr cannot fill its pipe buffer and stall.
+        let idx = self.index;
+        let out = spawned.stdout.take();
+        let err = spawned.stderr.take();
+        let sink_out = Arc::clone(sink);
+        let sink_err = Arc::clone(sink);
+        let ev = self.events.clone();
+        let name = self.spec.name.clone();
+        let mut pump = tokio::spawn(async move {
+            let out_ev = ev.clone();
+            let out_name = name.clone();
+            let out_fut = async move {
+                if let Some(o) = out {
+                    let mut lines = BufReader::new(o).lines();
+                    while let Ok(Some(line)) = lines.next_line().await {
+                        let _ = sink_out.lock().unwrap().write_line(idx, "stdout", &line);
+                        if let Some(tx) = &out_ev {
+                            let _ = tx.send(SupervisorEvent::Log {
+                                worker: out_name.clone(),
+                                instance: idx,
+                                stream: "stdout".into(),
+                                line: line.clone(),
+                            });
+                        }
+                    }
+                }
+            };
+            let err_ev = ev.clone();
+            let err_name = name.clone();
+            let err_fut = async move {
+                if let Some(e) = err {
+                    let mut lines = BufReader::new(e).lines();
+                    while let Ok(Some(line)) = lines.next_line().await {
+                        let _ = sink_err.lock().unwrap().write_line(idx, "stderr", &line);
+                        if let Some(tx) = &err_ev {
+                            let _ = tx.send(SupervisorEvent::Log {
+                                worker: err_name.clone(),
+                                instance: idx,
+                                stream: "stderr".into(),
+                                line: line.clone(),
+                            });
+                        }
+                    }
+                }
+            };
+            tokio::join!(out_fut, err_fut);
+        });
+
+        let status = spawned.wait().await;
+        self.pid.store(0, Ordering::SeqCst);
+
+        // Normally the pipes hit EOF when the child exits and the pump ends on
+        // its own. Bound the join so a lingering grandchild holding the pipe
+        // open cannot wedge the supervisor; then stop pumping.
+        if tokio::time::timeout(Duration::from_secs(2), &mut pump).await.is_err() {
+            pump.abort();
+        }
+
+        status.map(|s| s.success()).unwrap_or(false)
+    }
+
+    /// Run the spawn/monitor/restart loop until the instance reaches a terminal state.
+    async fn run_daemon(&self) {
         let backoff = self.backoff();
         let mut retries: u32 = 0;
         let sink = match LogSink::new(&self.log_path, 10 * 1024 * 1024, 5) {
@@ -127,89 +218,10 @@ impl InstanceSupervisor {
         };
 
         loop {
-            self.set_state(InstanceState::Starting);
+            // Measure uptime around run_once so the reset-window logic (which keys
+            // off how long the process actually ran) keeps its daemon semantics.
             let started = Instant::now();
-
-            let mut spawned = match self.spawner.spawn(&self.spec) {
-                Ok(s) => s,
-                Err(_) => {
-                    // Treat spawn failure like a crash for restart accounting.
-                    self.set_state(InstanceState::Crashed);
-                    if !self.should_retry(&backoff, retries) {
-                        self.set_state(InstanceState::Failed);
-                        return;
-                    }
-                    retries += 1;
-                    self.restarts.store(retries, Ordering::SeqCst);
-                    self.set_state(InstanceState::Backoff);
-                    self.sleep_backoff(&backoff, retries).await;
-                    continue;
-                }
-            };
-            self.set_state(InstanceState::Running);
-            self.pid.store(spawned.pid().unwrap_or(0), Ordering::SeqCst);
-
-            // Drain stdout AND stderr concurrently with waiting for exit, so a
-            // long-running worker that holds its pipes open does not block exit
-            // detection, and a chatty stderr cannot fill its pipe buffer and stall.
-            let idx = self.index;
-            let out = spawned.stdout.take();
-            let err = spawned.stderr.take();
-            let sink_out = Arc::clone(&sink);
-            let sink_err = Arc::clone(&sink);
-            let ev = self.events.clone();
-            let name = self.spec.name.clone();
-            let mut pump = tokio::spawn(async move {
-                let out_ev = ev.clone();
-                let out_name = name.clone();
-                let out_fut = async move {
-                    if let Some(o) = out {
-                        let mut lines = BufReader::new(o).lines();
-                        while let Ok(Some(line)) = lines.next_line().await {
-                            let _ = sink_out.lock().unwrap().write_line(idx, "stdout", &line);
-                            if let Some(tx) = &out_ev {
-                                let _ = tx.send(SupervisorEvent::Log {
-                                    worker: out_name.clone(),
-                                    instance: idx,
-                                    stream: "stdout".into(),
-                                    line: line.clone(),
-                                });
-                            }
-                        }
-                    }
-                };
-                let err_ev = ev.clone();
-                let err_name = name.clone();
-                let err_fut = async move {
-                    if let Some(e) = err {
-                        let mut lines = BufReader::new(e).lines();
-                        while let Ok(Some(line)) = lines.next_line().await {
-                            let _ = sink_err.lock().unwrap().write_line(idx, "stderr", &line);
-                            if let Some(tx) = &err_ev {
-                                let _ = tx.send(SupervisorEvent::Log {
-                                    worker: err_name.clone(),
-                                    instance: idx,
-                                    stream: "stderr".into(),
-                                    line: line.clone(),
-                                });
-                            }
-                        }
-                    }
-                };
-                tokio::join!(out_fut, err_fut);
-            });
-
-            let status = spawned.wait().await;
-            self.pid.store(0, Ordering::SeqCst);
-
-            // Normally the pipes hit EOF when the child exits and the pump ends on
-            // its own. Bound the join so a lingering grandchild holding the pipe
-            // open cannot wedge the supervisor; then stop pumping.
-            if tokio::time::timeout(Duration::from_secs(2), &mut pump).await.is_err() {
-                pump.abort();
-            }
-
-            let success = status.map(|s| s.success()).unwrap_or(false);
+            let success = self.run_once(&sink).await;
             let uptime = started.elapsed();
 
             // Reset the retry counter after a sufficiently long run (systemd-style
@@ -236,6 +248,43 @@ impl InstanceSupervisor {
             self.set_state(InstanceState::Backoff);
             self.sleep_backoff(&backoff, retries).await;
         }
+    }
+
+    /// Run on a schedule: idle → wait for next fire → run once → repeat.
+    async fn run_scheduled(&self, schedule: &Schedule, overlap: OverlapPolicy) {
+        let sink = std::sync::Arc::new(std::sync::Mutex::new(
+            LogSink::new(&self.log_path, 10 * 1024 * 1024, 5).expect("log sink")));
+        loop {
+            self.set_state(InstanceState::Idle);
+            let delay = match crate::schedule::next_delay(schedule, chrono::Utc::now()) {
+                Ok(d) => d,
+                Err(_) => { self.set_state(InstanceState::Failed); return; }
+            };
+            tokio::time::sleep(delay).await;
+            // v1: Skip semantics — each run is awaited before the next is scheduled.
+            // Queue/KillPrevious accepted in the type but behave as Skip for now.
+            let _ = overlap;
+            self.run_once(&sink).await;
+        }
+    }
+
+    /// Run a fixed number of times with an optional inter-run delay, then settle
+    /// into a terminal Completed/Failed state.
+    async fn run_batch(&self, run_count: u32, delay_secs: u64) {
+        let sink = std::sync::Arc::new(std::sync::Mutex::new(
+            LogSink::new(&self.log_path, 10 * 1024 * 1024, 5).expect("log sink")));
+        let mut any_failed = false;
+        for i in 0..run_count {
+            let ok = self.run_once(&sink).await;
+            if !ok { any_failed = true; }
+            if i + 1 < run_count {
+                self.set_state(InstanceState::Idle);
+                if delay_secs > 0 {
+                    tokio::time::sleep(Duration::from_secs(delay_secs)).await;
+                }
+            }
+        }
+        self.set_state(if any_failed { InstanceState::Failed } else { InstanceState::Completed });
     }
 
     /// Does the restart policy want another run after this exit?
@@ -345,6 +394,41 @@ mod tests {
         }
         assert!(seen.contains(&(InstanceState::Starting, InstanceState::Running)));
         assert!(seen.contains(&(InstanceState::Running, InstanceState::Stopped)));
+    }
+
+    #[tokio::test]
+    async fn batch_runs_exactly_n_times_then_completed() {
+        let dir = tempfile::tempdir().unwrap();
+        let counter = dir.path().join("count");
+        let mut s = spec("sh", &["-c", &format!("echo x >> {}", counter.display())],
+                         RestartPolicy { kind: RestartKind::Never, ..Default::default() });
+        s.run_mode = RunMode::Batch { run_count: 3, delay_secs: 0 };
+        s.working_dir = dir.path().to_path_buf();
+        let sup = InstanceSupervisor::new(0, s, Arc::new(TokioProcess), dir.path().join("b.log"));
+        let mut rx = sup.subscribe();
+        sup.run_until_terminal().await;
+        assert_eq!(std::fs::read_to_string(&counter).unwrap().lines().count(), 3);
+        assert_eq!(*rx.borrow_and_update(), InstanceState::Completed);
+    }
+
+    #[tokio::test]
+    async fn scheduled_interval_fires_multiple_times() {
+        let dir = tempfile::tempdir().unwrap();
+        let counter = dir.path().join("count");
+        let mut s = spec("sh", &["-c", &format!("echo x >> {}", counter.display())],
+                         RestartPolicy { kind: RestartKind::Never, ..Default::default() });
+        s.run_mode = RunMode::Scheduled {
+            schedule: crate::worker::Schedule::IntervalSecs(1),
+            overlap: crate::worker::OverlapPolicy::Skip,
+        };
+        s.working_dir = dir.path().to_path_buf();
+        let sup = std::sync::Arc::new(InstanceSupervisor::new(0, s, Arc::new(TokioProcess), dir.path().join("s.log")));
+        let run = sup.clone();
+        let h = tokio::spawn(async move { run.run_until_terminal().await });
+        tokio::time::sleep(std::time::Duration::from_millis(2500)).await;
+        h.abort();
+        let n = std::fs::read_to_string(&counter).map(|c| c.lines().count()).unwrap_or(0);
+        assert!(n >= 2, "expected >= 2 fires, got {n}");
     }
 
     #[tokio::test]
