@@ -197,12 +197,22 @@ export function CreateFlow({
       setSelected(res.length ? new Set([0]) : new Set());
       setScanned(true);
     } catch (err) {
-      setScanError(String(err));
+      const msg = String(err);
+      setScanError(
+        msg.includes("unknown_method")
+          ? "This daemon is outdated — quit and reopen Servicio (or run: pkill servicio-daemon)."
+          : msg,
+      );
       setSuggestions([]);
       setScanned(true);
     } finally {
       setScanning(false);
     }
+  }
+
+  async function browse() {
+    const p = await api.pickFolder();
+    if (p) setFolder(p);
   }
 
   function toggle(i: number) {
@@ -343,6 +353,9 @@ export function CreateFlow({
                   />
                 </Field>
               </div>
+              <button type="button" className="btn-ghost" onClick={browse}>
+                Browse…
+              </button>
               <button className="btn-primary" onClick={scan} disabled={scanning}>
                 {scanning ? "Scanning…" : "Scan"}
               </button>

@@ -26,6 +26,14 @@ export const api = {
   detectWorkers: (path: string) => invoke<SuggestionDraft[]>("detect_workers", { path }),
   metrics: (worker: string, sinceSecs: number) => invoke<{ instance: number; points: MetricPointT[] }[]>("metrics", { worker, sinceSecs }),
   serviceStatus: () => invoke<{ installed: boolean; supported?: boolean }>("service_status"),
+  appVersion: () => invoke<string>("app_version"),
+  pickFolder: async (): Promise<string | null> => {
+    try {
+      const { open } = await import("@tauri-apps/plugin-dialog");
+      const r = await open({ directory: true, multiple: false });
+      return typeof r === "string" ? r : null;
+    } catch { return null; }
+  },
   installService: () => invoke<void>("install_service"),
   uninstallService: () => invoke<void>("uninstall_service"),
   checkUpdate: async (): Promise<string | null> => {

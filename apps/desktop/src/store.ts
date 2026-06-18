@@ -10,9 +10,11 @@ interface State {
   metrics: Record<string, MetricPointT[]>;
   daemon: DaemonStatus | null;
   lastError: string | null;
+  daemonWarning: string | null;
   setWorkers: (list: WorkerStatus[]) => void;
   setDaemon: (d: DaemonStatus) => void;
   setError: (msg: string | null) => void;
+  setDaemonWarning: (msg: string | null) => void;
   applyEvent: (e: WorkerEvent) => void;
   reset: () => void;
 }
@@ -23,10 +25,12 @@ export const useStore = create<State>((set) => ({
   metrics: {},
   daemon: null,
   lastError: null,
+  daemonWarning: null,
   setWorkers: (list) =>
     set(() => ({ workers: Object.fromEntries(list.map((w) => [w.name, w])) })),
   setDaemon: (daemon) => set(() => ({ daemon })),
   setError: (lastError) => set(() => ({ lastError })),
+  setDaemonWarning: (daemonWarning) => set(() => ({ daemonWarning })),
   applyEvent: (e) =>
     set((s) => {
       if (e.kind === "state") {
@@ -49,5 +53,5 @@ export const useStore = create<State>((set) => ({
       }
       return {};
     }),
-  reset: () => set(() => ({ workers: {}, logs: {}, metrics: {}, daemon: null, lastError: null })),
+  reset: () => set(() => ({ workers: {}, logs: {}, metrics: {}, daemon: null, lastError: null, daemonWarning: null })),
 }));
