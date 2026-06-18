@@ -275,3 +275,25 @@ async fn metrics_method_returns_series_for_running_worker() {
     }
     h.shutdown().await;
 }
+
+#[tokio::test]
+async fn detect_workers_finds_laravel_in_fixture() {
+    let dir = tempfile::tempdir().unwrap();
+    let paths = Paths::new(dir.path().to_path_buf());
+    let h = start(paths.clone(), "secret".into()).await;
+    let proj = dir.path().join("proj");
+    std::fs::create_dir_all(&proj).unwrap();
+    std::fs::write(proj.join("artisan"), "#!/usr/bin/env php").unwrap();
+    let replies = hello_then(&paths.socket(), vec![
+        Frame::Request { id: 1, method: "detect_workers".into(), params: json!({"path": proj.to_str().unwrap()}) },
+    ]).await;
+    match &replies[1] {
+        Frame::Response { id: 1, result: Some(v), .. } => {
+            let arr = v.as_array().unwrap();
+            assert!(arr.iter().any(|s| s["source"] == "laravel/artisan"));
+            assert!(arr.iter().any(|s| s["source"] == "generic"));
+        }
+        other => panic!("unexpected: {other:?}"),
+    }
+    h.shutdown().await;
+}

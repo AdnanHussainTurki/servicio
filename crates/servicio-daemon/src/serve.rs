@@ -335,6 +335,14 @@ async fn dispatch(daemon: &Arc<Daemon>, id: u64, method: &str, params: serde_jso
                 Err(e) => Frame::err(id, "db_error", &e.to_string()),
             }
         }
+        "detect_workers" => {
+            let path = params.get("path").and_then(|p| p.as_str()).unwrap_or("");
+            let suggestions = servicio_detect::detect_all(std::path::Path::new(path));
+            match serde_json::to_value(suggestions) {
+                Ok(v) => Frame::ok(id, v),
+                Err(e) => Frame::err(id, "internal", &e.to_string()),
+            }
+        }
         other => Frame::err(id, "unknown_method", &format!("no such method: {other}")),
     }
 }
