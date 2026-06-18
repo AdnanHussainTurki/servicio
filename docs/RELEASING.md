@@ -1,5 +1,15 @@
 # Releasing Servicio
 
+## Cut a release via the workflow (recommended)
+Tag `vX.Y.Z` and push — the [release workflow](../.github/workflows/release.yml) builds
+the universal `.dmg` on macOS and creates a GitHub Release (with auto-generated notes):
+```bash
+git tag v0.1.0 && git push origin v0.1.0
+```
+The published `.dmg`/`.app` are **unsigned** (no Apple cert in CI). To produce a signed +
+notarized release, add the `APPLE_*` env vars below as repository secrets and export them
+in the build step (see the signing section). The steps below cover building locally.
+
 ## Prerequisites
 - `rustup target add x86_64-apple-darwin` (for the Intel half of the universal build).
 - Use the **rustup** toolchain for the universal build, not a Homebrew `rust` — only rustup
