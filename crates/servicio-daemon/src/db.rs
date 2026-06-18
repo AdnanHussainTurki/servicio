@@ -41,8 +41,47 @@ impl Db {
                 spec_json TEXT NOT NULL,
                 autostart INTEGER NOT NULL,
                 enabled   INTEGER NOT NULL
-            );",
+            );
+            CREATE TABLE IF NOT EXISTS metrics (
+                worker   TEXT NOT NULL,
+                instance INTEGER NOT NULL,
+                ts       INTEGER NOT NULL,
+                cpu      REAL NOT NULL,
+                mem      INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_metrics_worker_ts ON metrics(worker, ts);",
         )
+    }
+
+    pub fn insert_metric(&self, worker: &str, instance: u32, ts: u64, cpu: f32, mem: u64) -> rusqlite::Result<()> {
+        self.conn.execute(
+            "INSERT INTO metrics (worker, instance, ts, cpu, mem) VALUES (?1,?2,?3,?4,?5)",
+            rusqlite::params![worker, instance, ts as i64, cpu as f64, mem as i64],
+        )?;
+        Ok(())
+    }
+
+    /// Returns (instance, points) grouped, points = (ts,cpu,mem), for ts >= since.
+    pub fn query_metrics(&self, worker: &str, since: u64) -> rusqlite::Result<Vec<(u32, Vec<(u64, f32, u64)>)>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT instance, ts, cpu, mem FROM metrics WHERE worker=?1 AND ts>=?2 ORDER BY instance, ts")?;
+        let rows = stmt.query_map(rusqlite::params![worker, since as i64], |r| {
+            Ok((r.get::<_, i64>(0)? as u32, r.get::<_, i64>(1)? as u64, r.get::<_, f64>(2)? as f32, r.get::<_, i64>(3)? as u64))
+        })?;
+        let mut out: Vec<(u32, Vec<(u64, f32, u64)>)> = Vec::new();
+        for row in rows {
+            let (inst, ts, cpu, mem) = row?;
+            match out.last_mut() {
+                Some((i, pts)) if *i == inst => pts.push((ts, cpu, mem)),
+                _ => out.push((inst, vec![(ts, cpu, mem)])),
+            }
+        }
+        Ok(out)
+    }
+
+    pub fn prune_metrics(&self, older_than_ts: u64) -> rusqlite::Result<()> {
+        self.conn.execute("DELETE FROM metrics WHERE ts < ?1", [older_than_ts as i64])?;
+        Ok(())
     }
 
     /// Insert or replace a worker by name. Full spec stored as JSON; a couple of
@@ -160,6 +199,21 @@ mod tests {
         db.upsert_worker(&no).unwrap();
         let names: Vec<_> = db.autostart_workers().unwrap().into_iter().map(|w| w.name).collect();
         assert_eq!(names, vec!["yes".to_string()]);
+    }
+
+    #[test]
+    fn metrics_insert_query_and_prune() {
+        let db = Db::open_in_memory().unwrap();
+        db.insert_metric("q", 0, 100, 1.5, 1000).unwrap();
+        db.insert_metric("q", 0, 200, 2.5, 2000).unwrap();
+        db.insert_metric("q", 1, 200, 0.5, 500).unwrap();
+        let series = db.query_metrics("q", 0).unwrap();
+        let s0 = series.iter().find(|s| s.0 == 0).unwrap();
+        assert_eq!(s0.1.len(), 2);
+        db.prune_metrics(150).unwrap();
+        let after = db.query_metrics("q", 0).unwrap();
+        let s0 = after.iter().find(|s| s.0 == 0).unwrap();
+        assert_eq!(s0.1.len(), 1);
     }
 
     #[test]
