@@ -86,6 +86,8 @@ pub struct WorkerSpec {
     pub group: Option<String>,
     #[serde(default)]
     pub tags: Vec<String>,
+    #[serde(default)]
+    pub display_name: Option<String>,
 }
 
 #[cfg(test)]
@@ -106,6 +108,7 @@ mod tests {
             enabled: true,
             group: None,
             tags: Vec::new(),
+            display_name: None,
         };
         let json = serde_json::to_string(&spec).unwrap();
         let back: WorkerSpec = serde_json::from_str(&json).unwrap();
@@ -119,6 +122,7 @@ mod tests {
             working_dir: PathBuf::from("/"), env: BTreeMap::new(),
             run_mode: RunMode::Daemon { concurrency: 1 }, restart: RestartPolicy::default(),
             autostart: false, enabled: true, group: Some("app".into()), tags: vec!["redis".into(), "critical".into()],
+            display_name: None,
         };
         let back: WorkerSpec = serde_json::from_str(&serde_json::to_string(&s).unwrap()).unwrap();
         assert_eq!(s, back);
@@ -128,6 +132,24 @@ mod tests {
         let loaded: WorkerSpec = serde_json::from_str(old).unwrap();
         assert_eq!(loaded.group, None);
         assert!(loaded.tags.is_empty());
+    }
+
+    #[test]
+    fn worker_spec_display_name_roundtrip() {
+        let s = WorkerSpec {
+            name: "q".into(), command: "sh".into(), args: vec![],
+            working_dir: PathBuf::from("/"), env: BTreeMap::new(),
+            run_mode: RunMode::Daemon { concurrency: 1 }, restart: RestartPolicy::default(),
+            autostart: false, enabled: true, group: None, tags: vec![],
+            display_name: Some("Queue Worker".into()),
+        };
+        let back: WorkerSpec = serde_json::from_str(&serde_json::to_string(&s).unwrap()).unwrap();
+        assert_eq!(s, back);
+        assert_eq!(back.display_name.as_deref(), Some("Queue Worker"));
+        // back-compat: JSON without display_name field loads to None
+        let old = r#"{"name":"q","command":"sh","args":[],"working_dir":"/","env":{},"run_mode":{"type":"daemon","concurrency":1},"restart":{"kind":"on_failure","max_retries":5,"base_secs":1,"max_secs":60,"reset_window_secs":30},"autostart":false,"enabled":true}"#;
+        let loaded: WorkerSpec = serde_json::from_str(old).unwrap();
+        assert_eq!(loaded.display_name, None);
     }
 
     #[test]

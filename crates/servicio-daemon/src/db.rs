@@ -158,6 +158,7 @@ mod tests {
             enabled: true,
             group: None,
             tags: Vec::new(),
+            display_name: None,
         }
     }
 

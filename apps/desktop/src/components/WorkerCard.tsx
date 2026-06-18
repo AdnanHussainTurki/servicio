@@ -34,6 +34,8 @@ export function WorkerCard({
   const s = styleFor(state);
   const restarts = w.instances.reduce((n, i) => n + i.restart_count, 0);
   const running = w.instances.filter((i) => i.state === "running").length;
+  const title = w.display_name?.trim() || w.name;
+  const showId = title !== w.name;
   const tags = w.tags ?? [];
   const TAG_CAP = 4;
   const shownTags = tags.slice(0, TAG_CAP);
@@ -59,8 +61,13 @@ export function WorkerCard({
           <StatusDot state={state} />
           <div className="min-w-0 flex-1">
             <h3 className="truncate font-display text-[15px] font-semibold leading-tight text-stone-900 dark:text-stone-50">
-              {w.name}
+              {title}
             </h3>
+            {showId && (
+              <p className="mt-0.5 truncate font-mono text-[11px] text-stone-400 dark:text-stone-500">
+                id: {w.name}
+              </p>
+            )}
             <p className="mt-0.5 font-mono text-[11px] text-stone-400 dark:text-stone-500">
               daemon · ×{w.run_mode.concurrency}
             </p>

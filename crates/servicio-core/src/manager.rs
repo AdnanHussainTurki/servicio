@@ -89,6 +89,7 @@ impl Manager {
                     .collect(),
                 group: w.spec.group.clone(),
                 tags: w.spec.tags.clone(),
+                display_name: w.spec.display_name.clone(),
             })
             .collect();
         out.sort_by(|a, b| a.name.cmp(&b.name));
@@ -139,6 +140,7 @@ mod tests {
             enabled: true,
             group: None,
             tags: Vec::new(),
+            display_name: None,
         }
     }
 

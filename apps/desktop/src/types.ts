@@ -13,6 +13,7 @@ export type RunMode = RunModeDaemon;
 
 export interface WorkerStatus {
   name: string;
+  display_name?: string | null;
   run_mode: RunMode;
   instances: InstanceStatus[];
   group?: string | null;
@@ -37,7 +38,7 @@ export type RunModeAny =
   | { type: "batch"; run_count: number; delay_secs: number };
 
 export interface SuggestionDraft {
-  label: string; source: string; name: string;
+  label: string; source: string; name: string; display_name?: string | null;
   command: string; args: string[]; working_dir: string; run_mode: RunModeAny;
   group?: string | null; tags?: string[];
 }

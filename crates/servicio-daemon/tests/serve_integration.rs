@@ -99,6 +99,7 @@ fn sleeper(name: &str) -> WorkerSpec {
         enabled: true,
         group: None,
         tags: Vec::new(),
+        display_name: None,
     }
 }
 

@@ -12,6 +12,8 @@ pub struct WorkerStatus {
     pub group: Option<String>,
     #[serde(default)]
     pub tags: Vec<String>,
+    #[serde(default)]
+    pub display_name: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -107,6 +109,7 @@ mod tests {
             }],
             group: None,
             tags: Vec::new(),
+            display_name: None,
         };
         let v = serde_json::to_value(&s).unwrap();
         let back: WorkerStatus = serde_json::from_value(v).unwrap();
