@@ -1,0 +1,108 @@
+---
+import { useTranslations, useList, type Locale } from '../i18n/ui';
+
+interface Props {
+  locale: Locale;
+}
+const { locale } = Astro.props;
+const t = useTranslations(locale);
+const items = useList(locale, 'features.items');
+
+const icons = ['shield', 'modes', 'scan', 'tags', 'pulse', 'bolt', 'crud', 'globe'];
+const paths: Record<string, string> = {
+  shield: 'M12 3l7 3v6c0 4.4-3 7.4-7 9-4-1.6-7-4.6-7-9V6l7-3z',
+  modes: 'M4 6h16M4 12h16M4 18h10',
+  scan: 'M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M9 12a3 3 0 1 0 6 0 3 3 0 0 0-6 0z',
+  tags: 'M3 7l6-3 12 5-3 7-12-5L3 7zm5 1.5a1 1 0 1 0 0-2 1 1 0 0 0 0 2z',
+  pulse: 'M3 12h4l2-6 4 12 2-6h6',
+  bolt: 'M13 2L4 14h7l-1 8 9-12h-7l1-8z',
+  crud: 'M4 5h16M4 5v14h16V5M9 9h6M9 13h6',
+  globe: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM3 12h18M12 3c2.5 2.5 2.5 15 0 18M12 3c-2.5 2.5-2.5 15 0 18',
+};
+---
+
+<section class="section" id="features">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <p class="eyebrow">// capabilities</p>
+      <h2>{t('features.title')}</h2>
+      <p>{t('features.subtitle')}</p>
+    </div>
+
+    <div class="grid">
+      {items.map((it, i) => (
+        <article class="panel card reveal" style={`transition-delay:${(i % 4) * 70}ms`}>
+          <span class="ic" aria-hidden="true">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+              <path d={paths[icons[i] ?? 'pulse']} />
+            </svg>
+          </span>
+          <h3>{it.title}</h3>
+          <p>{it.body}</p>
+          <span class="card-idx">{String(i + 1).padStart(2, '0')}</span>
+        </article>
+      ))}
+    </div>
+  </div>
+</section>
+
+<style>
+  .grid {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(auto-fill, minmax(255px, 1fr));
+  }
+  .card {
+    padding: 1.5rem 1.4rem 1.6rem;
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.25s ease, border-color 0.25s ease, opacity 0.7s, box-shadow 0.3s;
+  }
+  .card:hover {
+    transform: translateY(-4px);
+    border-color: color-mix(in oklab, var(--accent) 45%, var(--line-strong));
+    box-shadow: var(--shadow);
+  }
+  .card::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(280px 120px at 100% 0, rgba(255, 106, 26, 0.1), transparent 70%);
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
+  }
+  .card:hover::after {
+    opacity: 1;
+  }
+  .ic {
+    display: grid;
+    place-items: center;
+    width: 42px;
+    height: 42px;
+    border-radius: 11px;
+    background: color-mix(in oklab, var(--accent) 14%, transparent);
+    border: 1px solid color-mix(in oklab, var(--accent) 30%, transparent);
+    color: var(--accent);
+    margin-bottom: 1.1rem;
+  }
+  .card h3 {
+    font-size: 1.18rem;
+    margin-bottom: 0.5rem;
+  }
+  .card p {
+    color: var(--text-dim);
+    margin: 0;
+    font-size: 0.96rem;
+    line-height: 1.55;
+  }
+  .card-idx {
+    position: absolute;
+    top: 1.1rem;
+    inset-inline-end: 1.2rem;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    color: var(--text-faint);
+    opacity: 0.6;
+  }
+</style>

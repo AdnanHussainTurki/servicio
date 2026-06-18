@@ -1,0 +1,30 @@
+---
+import Base from '../layouts/Base.astro';
+import Header from './Header.astro';
+import Hero from './Hero.astro';
+import Problem from './Problem.astro';
+import Features from './Features.astro';
+import Showcase from './Showcase.astro';
+import Architecture from './Architecture.astro';
+import Install from './Install.astro';
+import Footer from './Footer.astro';
+import type { Locale } from '../i18n/ui';
+
+interface Props {
+  locale: Locale;
+}
+const { locale } = Astro.props;
+---
+
+<Base locale={locale}>
+  <Header locale={locale} />
+  <main id="main">
+    <Hero locale={locale} />
+    <Problem locale={locale} />
+    <Features locale={locale} />
+    <Showcase locale={locale} />
+    <Architecture locale={locale} />
+    <Install locale={locale} />
+  </main>
+  <Footer locale={locale} />
+</Base>

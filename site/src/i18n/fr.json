@@ -1,0 +1,81 @@
+{
+  "meta": {
+    "title": "Servicio — Un superviseur de bureau convivial pour vos services de développement",
+    "description": "Gardez vos files Laravel, workers Python, scripts Node — n'importe quelle commande — en vie, relancés en cas de crash, planifiés par cron, avec logs en direct et graphes CPU/mémoire, depuis une paisible application de bureau type salle de contrôle."
+  },
+  "nav": {
+    "features": "Fonctionnalités",
+    "screenshots": "Captures",
+    "architecture": "Architecture",
+    "install": "Installer",
+    "github": "GitHub"
+  },
+  "hero": {
+    "badge": "Open source · Licence MIT",
+    "title": "Gardez vos services de dev en vie.",
+    "subtitle": "Servicio supervise vos processus de longue durée — files Laravel, workers Python, scripts Node, tâches cron, n'importe quelle commande — relancés en cas de crash, démarrés à la connexion, avec logs et métriques en direct, le tout depuis une paisible interface type salle de contrôle.",
+    "cta_download": "Télécharger pour macOS",
+    "cta_github": "Voir sur GitHub",
+    "note": "Build universel macOS aujourd'hui · Linux (systemd) pris en charge · Windows sur la feuille de route"
+  },
+  "problem": {
+    "title": "Un tiroir plein de terminaux oubliés.",
+    "body": "Chaque développeur finit avec une pile de php artisan queue:work, python worker.py, npm run dev, tâches cron et scripts ponctuels — chacun dans son onglet de terminal, oublié jusqu'à ce qu'il meure en silence. Servicio est une petite application de bureau native plus un daemon headless qui les supervise tous : il les maintient en vie avec relance et backoff, les démarre à la connexion sans sudo, et vous montre logs en direct, graphes CPU et mémoire, et synthèses par groupe. Pas de YAML à la main, pas d'acrobaties tmux, pas de « est-ce que ça tourne encore ? » — juste un tableau de bord."
+  },
+  "features": {
+    "title": "Tout ce qu'il faut pour superviser.",
+    "subtitle": "Un tableau de bord paisible pour chaque processus de longue durée de votre machine.",
+    "items": [
+      { "title": "Supervision", "body": "Relance automatique avec backoff exponentiel, compteurs de relance, arrêt propre et remontée des crashs — la raison de l'échec atterrit dans le log du worker, pas dans le néant." },
+      { "title": "Trois modes d'exécution", "body": "Daemon (N instances toujours actives), Planifié (cron ou intervalle, avec politique de chevauchement) et Lot (exécuter N fois)." },
+      { "title": "Autodétection", "body": "Scannez un dossier de projet et obtenez des suggestions prêtes à l'emploi de six détecteurs : Laravel, Procfile, crontab, tasks.json de VS Code, Node et Python." },
+      { "title": "Groupes et tags", "body": "Organisez les workers en groupes avec vue dossier, étiquetez-les et filtrez le tableau de bord par tag." },
+      { "title": "Télémétrie en direct", "body": "Échantillonnage CPU et mémoire par instance, synthèses globales et par groupe, et mini-courbes en temps réel." },
+      { "title": "Actions groupées", "body": "Démarrez, arrêtez ou relancez tout un groupe en un seul clic." },
+      { "title": "CRUD complet", "body": "Créez avec un assistant, éditez n'importe quel worker, supprimez, et importez ou exportez toute votre config en JSON." },
+      { "title": "Natif et multiplateforme", "body": "Un .dmg universel macOS aujourd'hui, Linux via systemd, avec moteur auto-actualisable et rapport d'erreurs Sentry optionnel." }
+    ]
+  },
+  "showcase": {
+    "title": "Voyez-le à l'œuvre.",
+    "subtitle": "Une esthétique salle de contrôle qui ne vous gêne pas.",
+    "shots": {
+      "dashboard_dark": "Tableau de bord en direct avec graphes CPU et mémoire de la flotte",
+      "dashboard_light": "Le même tableau de bord en mode clair",
+      "groups": "Statistiques par groupe avec démarrage, arrêt et relance groupés",
+      "wizard": "L'assistant de nouveau worker avec autodétection des frameworks"
+    }
+  },
+  "architecture": {
+    "title": "Un petit cœur Rust, une coque native.",
+    "body": "Servicio est un workspace cargo en Rust plus une application de bureau Tauri. L'interface dialogue avec un daemon headless via un socket Unix 0600 avec authentification par token ; le daemon supervise chaque worker et les persiste dans SQLite. Le même daemon répond à la CLI servicio, vous pouvez donc aussi le piloter depuis le terminal.",
+    "rows": {
+      "core": "Lancement de processus, supervision, relance et backoff, modes d'exécution, métriques.",
+      "ipc": "Le protocole Frame en JSONL partagé par le daemon et les clients.",
+      "daemon": "Le superviseur de longue vie : stockage des workers en SQLite plus serveur de socket.",
+      "cli": "servicio — un client terminal léger sur le même protocole.",
+      "detect": "Scanneurs de dossiers qui proposent des workers (Laravel, Node, Python, …)."
+    }
+  },
+  "install": {
+    "title": "Démarrez en quelques minutes.",
+    "macos_title": "macOS",
+    "macos_body": "Téléchargez le .dmg universel depuis la dernière release, glissez Servicio dans Applications, puis clic droit → Ouvrir au premier lancement (le build n'est pas encore signé).",
+    "linux_title": "Linux",
+    "linux_body": "Compilez depuis les sources ; le daemon s'installe comme unité systemd --user. Les paquets Linux sont sur la feuille de route.",
+    "cli_title": "Vous préférez le terminal ?",
+    "cli_body": "Le même daemon parle à la CLI servicio :"
+  },
+  "footer": {
+    "tagline": "Un superviseur de bureau convivial pour vos services de développement de longue durée.",
+    "built": "Conçu avec Rust, Tauri et React.",
+    "license": "Licence MIT",
+    "links_title": "Projet",
+    "lang_title": "Langue"
+  },
+  "a11y": {
+    "skip": "Aller au contenu",
+    "theme": "Basculer le mode sombre",
+    "lang": "Changer de langue"
+  }
+}

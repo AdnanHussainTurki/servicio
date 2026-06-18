@@ -1,0 +1,127 @@
+---
+import '../styles/global.css';
+import { locales, localeMeta, useTranslations, localizedPath, type Locale } from '../i18n/ui';
+
+interface Props {
+  locale: Locale;
+}
+
+const { locale } = Astro.props;
+const t = useTranslations(locale);
+const meta = localeMeta[locale];
+
+const origin = Astro.site?.origin ?? 'https://adnanhussainturki.github.io';
+const base = import.meta.env.BASE_URL; // "/servicio"
+const canonical = origin + localizedPath(locale, base);
+const ogImage = `${origin}${base.replace(/\/$/, '')}/images/dashboard-dark.png`;
+
+// hreflang alternates for every locale + x-default → English
+const alternates = locales.map((l) => ({
+  hreflang: l,
+  href: origin + localizedPath(l, base),
+}));
+
+const title = t('meta.title');
+const description = t('meta.description');
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'SoftwareApplication',
+  name: 'Servicio',
+  applicationCategory: 'DeveloperApplication',
+  operatingSystem: 'macOS, Linux',
+  description,
+  url: canonical,
+  image: ogImage,
+  license: 'https://opensource.org/licenses/MIT',
+  offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+  author: { '@type': 'Person', name: 'Adnan Hussain' },
+};
+---
+
+<!doctype html>
+<html lang={locale} dir={meta.dir}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="generator" content={Astro.generator} />
+
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+
+    {alternates.map((a) => <link rel="alternate" hreflang={a.hreflang} href={a.href} />)}
+    <link rel="alternate" hreflang="x-default" href={origin + localizedPath('en', base)} />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Servicio" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:image" content={ogImage} />
+    <meta property="og:image:width" content="1280" />
+    <meta property="og:image:height" content="820" />
+    <meta property="og:locale" content={meta.og} />
+    {locales.filter((l) => l !== locale).map((l) => <meta property="og:locale:alternate" content={localeMeta[l].og} />)}
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={ogImage} />
+
+    <meta name="theme-color" content="#07080a" />
+    <link rel="icon" type="image/svg+xml" href={`${base.replace(/\/$/, '')}/favicon.svg`} />
+
+    <!-- Fonts: display + body + mono, plus Arabic/Devanagari coverage -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Hanken+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&family=Noto+Sans+Arabic:wght@400;500;700&family=Noto+Sans+Devanagari:wght@400;500;700&display=swap"
+    />
+
+    <!-- Set theme before paint to avoid flash -->
+    <script is:inline>
+      (() => {
+        try {
+          const saved = localStorage.getItem('servicio-theme');
+          const sys = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+          document.documentElement.dataset.theme = saved || sys;
+        } catch (_) {
+          document.documentElement.dataset.theme = 'dark';
+        }
+      })();
+    </script>
+
+    <script type="application/ld+json" set:html={JSON.stringify(jsonLd)} />
+  </head>
+  <body>
+    <a class="skip-link" href="#main">{t('a11y.skip')}</a>
+    <slot />
+
+    <!-- Reveal-on-scroll, no dependencies -->
+    <script is:inline>
+      (() => {
+        const els = document.querySelectorAll('.reveal');
+        if (!('IntersectionObserver' in window) || matchMedia('(prefers-reduced-motion: reduce)').matches) {
+          els.forEach((e) => e.classList.add('in'));
+          return;
+        }
+        const io = new IntersectionObserver(
+          (entries) => {
+            entries.forEach((en) => {
+              if (en.isIntersecting) {
+                en.target.classList.add('in');
+                io.unobserve(en.target);
+              }
+            });
+          },
+          { threshold: 0.12 }
+        );
+        els.forEach((e) => io.observe(e));
+      })();
+    </script>
+  </body>
+</html>

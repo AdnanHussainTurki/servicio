@@ -1,0 +1,83 @@
+---
+import { useTranslations, type Locale } from '../i18n/ui';
+
+interface Props {
+  locale: Locale;
+}
+const { locale } = Astro.props;
+const t = useTranslations(locale);
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+
+const shots = [
+  { src: `${base}/images/dashboard-dark.png`, key: 'dashboard_dark', wide: true },
+  { src: `${base}/images/groups.png`, key: 'groups', wide: false },
+  { src: `${base}/images/wizard.png`, key: 'wizard', wide: false },
+  { src: `${base}/images/dashboard-light.png`, key: 'dashboard_light', wide: true },
+];
+---
+
+<section class="section" id="screenshots">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <p class="eyebrow">// the interface</p>
+      <h2>{t('showcase.title')}</h2>
+      <p>{t('showcase.subtitle')}</p>
+    </div>
+
+    <div class="shots">
+      {shots.map((s, i) => (
+        <figure class={`panel shot reveal ${s.wide ? 'wide' : ''}`} style={`transition-delay:${(i % 2) * 90}ms`}>
+          <img
+            src={s.src}
+            alt={t(`showcase.shots.${s.key}`)}
+            loading="lazy"
+            decoding="async"
+            width="1280"
+            height="820"
+          />
+          <figcaption>{t(`showcase.shots.${s.key}`)}</figcaption>
+        </figure>
+      ))}
+    </div>
+  </div>
+</section>
+
+<style>
+  .shots {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(2, 1fr);
+  }
+  @media (max-width: 720px) {
+    .shots {
+      grid-template-columns: 1fr;
+    }
+  }
+  .shot {
+    overflow: hidden;
+    padding: 0;
+  }
+  .shot.wide {
+    grid-column: span 2;
+  }
+  @media (max-width: 720px) {
+    .shot.wide {
+      grid-column: span 1;
+    }
+  }
+  .shot img {
+    width: 100%;
+    height: auto;
+    border-bottom: 1px solid var(--line);
+    transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .shot:hover img {
+    transform: scale(1.02);
+  }
+  figcaption {
+    padding: 0.85rem 1.1rem;
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    color: var(--text-dim);
+  }
+</style>

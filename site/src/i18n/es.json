@@ -1,0 +1,81 @@
+{
+  "meta": {
+    "title": "Servicio — Un supervisor de escritorio amigable para tus servicios de desarrollo",
+    "description": "Mantén vivas tus colas de Laravel, workers de Python, scripts de Node — cualquier comando — reiniciados al fallar, programados con cron, con logs en vivo y gráficos de CPU y memoria, desde una tranquila app de escritorio tipo sala de control."
+  },
+  "nav": {
+    "features": "Funciones",
+    "screenshots": "Capturas",
+    "architecture": "Arquitectura",
+    "install": "Instalar",
+    "github": "GitHub"
+  },
+  "hero": {
+    "badge": "Código abierto · Licencia MIT",
+    "title": "Mantén vivos tus servicios de desarrollo.",
+    "subtitle": "Servicio supervisa tus procesos de larga duración — colas de Laravel, workers de Python, scripts de Node, tareas cron, cualquier comando — reiniciados al fallar, iniciados al arrancar sesión, con logs y métricas en vivo, todo desde una tranquila interfaz tipo sala de control.",
+    "cta_download": "Descargar para macOS",
+    "cta_github": "Ver en GitHub",
+    "note": "Build universal para macOS hoy · Linux (systemd) compatible · Windows en la hoja de ruta"
+  },
+  "problem": {
+    "title": "Un cajón lleno de terminales olvidadas.",
+    "body": "Todo desarrollador acaba con un montón de php artisan queue:work, python worker.py, npm run dev, tareas cron y scripts sueltos — cada uno en su pestaña de terminal, olvidado hasta que muere en silencio. Servicio es una pequeña app de escritorio nativa más un daemon headless que los supervisa a todos: los mantiene vivos con reinicio y backoff, los inicia al arrancar sesión sin sudo, y te muestra logs en vivo, gráficos de CPU y memoria, y resúmenes por grupo. Sin YAML a mano, sin malabares con tmux, sin \"¿sigue funcionando?\" — solo un panel."
+  },
+  "features": {
+    "title": "Todo lo que necesitas para supervisar.",
+    "subtitle": "Un panel tranquilo para cada proceso de larga duración en tu máquina.",
+    "items": [
+      { "title": "Supervisión", "body": "Reinicio automático con backoff exponencial, contadores de reinicio, parada controlada y exposición de fallos — el motivo del fallo va al log del worker, no al vacío." },
+      { "title": "Tres modos de ejecución", "body": "Daemon (N instancias siempre activas), Programado (cron o intervalo, con política de solapamiento) y Lote (ejecutar N veces)." },
+      { "title": "Autodetección", "body": "Escanea una carpeta de proyecto y obtén sugerencias listas para usar de seis detectores: Laravel, Procfile, crontab, tasks.json de VS Code, Node y Python." },
+      { "title": "Grupos y etiquetas", "body": "Organiza los workers en grupos con vista de carpetas, etiquétalos y filtra el panel por etiqueta." },
+      { "title": "Telemetría en vivo", "body": "Muestreo de CPU y memoria por instancia, resúmenes globales y por grupo, y minigráficos en tiempo real." },
+      { "title": "Acciones en lote", "body": "Inicia, detén o reinicia un grupo entero con un solo clic." },
+      { "title": "CRUD completo", "body": "Crea con un asistente, edita cualquier worker, elimina, e importa o exporta toda tu configuración como JSON." },
+      { "title": "Nativo y multiplataforma", "body": "Un .dmg universal para macOS hoy, Linux vía systemd, con motor autoactualizable y reporte de errores opcional con Sentry." }
+    ]
+  },
+  "showcase": {
+    "title": "Míralo en acción.",
+    "subtitle": "Una estética de sala de control que no te estorba.",
+    "shots": {
+      "dashboard_dark": "Panel en vivo con gráficos de CPU y memoria de la flota",
+      "dashboard_light": "El mismo panel en modo claro",
+      "groups": "Estadísticas por grupo con inicio, parada y reinicio en lote",
+      "wizard": "El asistente de nuevo worker con autodetección de frameworks"
+    }
+  },
+  "architecture": {
+    "title": "Un núcleo Rust pequeño, una carcasa nativa.",
+    "body": "Servicio es un workspace de cargo en Rust más una app de escritorio Tauri. La GUI habla con un daemon headless por un socket Unix 0600 con autenticación por token; el daemon supervisa cada worker y los persiste en SQLite. El mismo daemon responde a la CLI servicio, así que también puedes manejarlo desde la terminal.",
+    "rows": {
+      "core": "Lanzamiento de procesos, supervisión, reinicio y backoff, modos de ejecución, métricas.",
+      "ipc": "El protocolo Frame en JSONL compartido por daemon y clientes.",
+      "daemon": "El supervisor de larga vida: almacén de workers en SQLite más servidor de socket.",
+      "cli": "servicio — un cliente de terminal ligero sobre el mismo protocolo.",
+      "detect": "Escáneres de carpetas que proponen workers (Laravel, Node, Python, …)."
+    }
+  },
+  "install": {
+    "title": "Empieza en minutos.",
+    "macos_title": "macOS",
+    "macos_body": "Descarga el .dmg universal de la última release, arrastra Servicio a Aplicaciones, y haz clic derecho → Abrir en el primer arranque (el build aún no está firmado).",
+    "linux_title": "Linux",
+    "linux_body": "Compila desde el código fuente; el daemon se instala como unidad systemd --user. Los paquetes de Linux están en la hoja de ruta.",
+    "cli_title": "¿Prefieres la terminal?",
+    "cli_body": "El mismo daemon habla con la CLI servicio:"
+  },
+  "footer": {
+    "tagline": "Un supervisor de escritorio amigable para tus servicios de desarrollo de larga duración.",
+    "built": "Hecho con Rust, Tauri y React.",
+    "license": "Licencia MIT",
+    "links_title": "Proyecto",
+    "lang_title": "Idioma"
+  },
+  "a11y": {
+    "skip": "Saltar al contenido",
+    "theme": "Alternar modo oscuro",
+    "lang": "Cambiar idioma"
+  }
+}
