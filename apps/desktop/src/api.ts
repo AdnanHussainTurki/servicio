@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import type { WorkerStatus, DaemonStatus, WorkerEvent, RunMode } from "./types";
+import type { WorkerStatus, DaemonStatus, WorkerEvent, RunMode, SuggestionDraft, MetricPointT } from "./types";
 import { useStore } from "./store";
 
 export interface AddWorkerSpec {
@@ -22,6 +22,8 @@ export const api = {
   stopWorker: (name: string) => invoke<void>("stop_worker", { name }),
   restartWorker: (name: string) => invoke<void>("restart_worker", { name }),
   addWorker: (spec: AddWorkerSpec) => invoke<void>("add_worker", { spec }),
+  detectWorkers: (path: string) => invoke<SuggestionDraft[]>("detect_workers", { path }),
+  metrics: (worker: string, sinceSecs: number) => invoke<{ instance: number; points: MetricPointT[] }[]>("metrics", { worker, sinceSecs }),
 };
 
 /** Wire daemon events into the store. Call once at app start. */

@@ -30,6 +30,15 @@ describe("store", () => {
     expect(logs[logs.length - 1]).toContain("l1099");
   });
 
+  it("buffers metric samples per worker with a cap", () => {
+    for (let i = 0; i < 250; i++) {
+      useStore.getState().applyEvent({ kind: "metric", worker: "q", instance: 0, ts: i, cpu: 1.0, mem: 100 });
+    }
+    const m = useStore.getState().metrics["q"];
+    expect(m.length).toBe(200);
+    expect(m[m.length - 1].ts).toBe(249);
+  });
+
   it("sets and clears the last error", () => {
     useStore.getState().setError("boom");
     expect(useStore.getState().lastError).toBe("boom");
