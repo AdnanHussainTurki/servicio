@@ -1,0 +1,35 @@
+---
+import { useTranslations, type Locale } from '../i18n/ui';
+
+interface Props {
+  locale: Locale;
+}
+const { locale } = Astro.props;
+const t = useTranslations(locale);
+---
+
+<section class="section problem">
+  <div class="wrap">
+    <div class="panel railed problem-card reveal">
+      <p class="eyebrow">// the problem</p>
+      <h2>{t('problem.title')}</h2>
+      <p>{t('problem.body')}</p>
+    </div>
+  </div>
+</section>
+
+<style>
+  .problem-card {
+    padding: clamp(1.6rem, 1rem + 3vw, 3rem);
+    max-width: 78ch;
+  }
+  .problem-card h2 {
+    font-size: clamp(1.6rem, 1.1rem + 2.4vw, 2.5rem);
+    margin-block: 0.8rem 1rem;
+  }
+  .problem-card p {
+    color: var(--text-dim);
+    margin: 0;
+    font-size: 1.06rem;
+  }
+</style>

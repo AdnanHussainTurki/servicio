@@ -1,0 +1,124 @@
+---
+import { useTranslations, type Locale } from '../i18n/ui';
+
+interface Props {
+  locale: Locale;
+}
+const { locale } = Astro.props;
+const t = useTranslations(locale);
+
+const crates = [
+  { name: 'servicio-core', key: 'core' },
+  { name: 'servicio-ipc', key: 'ipc' },
+  { name: 'servicio-daemon', key: 'daemon' },
+  { name: 'servicio-cli', key: 'cli' },
+  { name: 'servicio-detect', key: 'detect' },
+];
+---
+
+<section class="section" id="architecture">
+  <div class="wrap arch-grid">
+    <div class="section-head reveal arch-head">
+      <p class="eyebrow">// architecture</p>
+      <h2>{t('architecture.title')}</h2>
+      <p>{t('architecture.body')}</p>
+
+      <div class="diagram" aria-hidden="true">
+        <div class="node node-gui">apps/desktop · Tauri 2 + React 19</div>
+        <div class="wire"><span>JSONL · 0600 socket · token auth</span></div>
+        <div class="node node-daemon">servicio-daemon · supervisor + SQLite</div>
+      </div>
+    </div>
+
+    <ul class="crates reveal">
+      {crates.map((c, i) => (
+        <li class="panel railed crate" style={`transition-delay:${i * 60}ms`}>
+          <code>{c.name}</code>
+          <span>{t(`architecture.rows.${c.key}`)}</span>
+        </li>
+      ))}
+    </ul>
+  </div>
+</section>
+
+<style>
+  .arch-grid {
+    display: grid;
+    gap: clamp(2rem, 4vw, 3.2rem);
+    align-items: start;
+  }
+  @media (min-width: 940px) {
+    .arch-grid {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+  .arch-head {
+    margin-bottom: 0;
+    max-width: none;
+  }
+
+  .diagram {
+    margin-top: 2rem;
+    display: grid;
+    gap: 0;
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+  }
+  .node {
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-sm);
+    padding: 0.9rem 1.1rem;
+    background: var(--panel);
+    color: var(--text);
+  }
+  .node-gui {
+    border-color: color-mix(in oklab, var(--accent-2) 45%, var(--line-strong));
+    box-shadow: inset 0 0 30px -18px var(--accent-2);
+  }
+  .node-daemon {
+    border-color: color-mix(in oklab, var(--accent) 45%, var(--line-strong));
+    box-shadow: inset 0 0 30px -18px var(--accent);
+  }
+  .wire {
+    display: grid;
+    place-items: center;
+    position: relative;
+    height: 46px;
+  }
+  .wire::before {
+    content: '';
+    position: absolute;
+    inset-block: 0;
+    width: 1px;
+    background: linear-gradient(var(--accent-2), var(--accent));
+  }
+  .wire span {
+    position: relative;
+    background: var(--bg);
+    padding: 0.15rem 0.6rem;
+    color: var(--text-faint);
+    font-size: 0.68rem;
+  }
+
+  .crates {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.7rem;
+  }
+  .crate {
+    padding: 1rem 1.2rem;
+    display: grid;
+    gap: 0.3rem;
+  }
+  .crate code {
+    font-family: var(--font-mono);
+    font-size: 0.86rem;
+    color: var(--accent);
+  }
+  .crate span {
+    color: var(--text-dim);
+    font-size: 0.95rem;
+  }
+</style>

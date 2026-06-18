@@ -1,0 +1,135 @@
+---
+import { locales, localeMeta, useTranslations, localizedPath, type Locale } from '../i18n/ui';
+
+interface Props {
+  locale: Locale;
+}
+const { locale } = Astro.props;
+const t = useTranslations(locale);
+const base = import.meta.env.BASE_URL;
+const repo = 'https://github.com/AdnanHussainTurki/servicio';
+
+const links = [
+  { href: repo, label: 'GitHub' },
+  { href: `${repo}/releases`, label: t('nav.install') },
+  { href: `${repo}/blob/main/CONTRIBUTING.md`, label: 'Contributing' },
+  { href: `${repo}/blob/main/LICENSE`, label: t('footer.license') },
+];
+---
+
+<footer class="footer">
+  <div class="wrap footer-grid">
+    <div class="footer-brand">
+      <div class="brand">
+        <span class="brand-mark">S</span>
+        <span class="brand-name">servicio</span>
+      </div>
+      <p>{t('footer.tagline')}</p>
+      <p class="built eyebrow">{t('footer.built')}</p>
+    </div>
+
+    <nav class="footer-col" aria-label={t('footer.links_title')}>
+      <p class="eyebrow">{t('footer.links_title')}</p>
+      {links.map((l) => <a href={l.href}>{l.label}</a>)}
+    </nav>
+
+    <nav class="footer-col" aria-label={t('footer.lang_title')}>
+      <p class="eyebrow">{t('footer.lang_title')}</p>
+      {locales.map((l) => (
+        <a href={localizedPath(l, base)} lang={l} dir={localeMeta[l].dir} hreflang={l} aria-current={l === locale ? 'true' : undefined}>
+          {localeMeta[l].name}
+        </a>
+      ))}
+    </nav>
+  </div>
+
+  <div class="wrap footer-base">
+    <span>© 2026 Adnan Hussain · {t('footer.license')}</span>
+    <span class="sig">SERVICIO</span>
+  </div>
+</footer>
+
+<style>
+  .footer {
+    border-top: 1px solid var(--line);
+    padding-block: clamp(2.5rem, 5vw, 4rem) 1.5rem;
+    margin-top: 2rem;
+    background: linear-gradient(180deg, transparent, color-mix(in oklab, var(--accent) 4%, transparent));
+  }
+  .footer-grid {
+    display: grid;
+    gap: 2rem;
+    grid-template-columns: 1.6fr 1fr 1fr;
+  }
+  @media (max-width: 720px) {
+    .footer-grid {
+      grid-template-columns: 1fr 1fr;
+    }
+    .footer-brand {
+      grid-column: span 2;
+    }
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    margin-bottom: 0.9rem;
+  }
+  .brand-mark {
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, var(--accent), #ff9a4d);
+    color: #1a0d03;
+    font-family: var(--font-display);
+    font-weight: 800;
+  }
+  .brand-name {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 1.12rem;
+  }
+  .footer-brand p {
+    color: var(--text-dim);
+    max-width: 38ch;
+    margin: 0 0 0.6rem;
+  }
+  .built {
+    color: var(--text-faint);
+  }
+  .footer-col {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+  .footer-col .eyebrow {
+    margin-bottom: 0.3rem;
+  }
+  .footer-col a {
+    color: var(--text-dim);
+    font-size: 0.95rem;
+    transition: color 0.18s;
+  }
+  .footer-col a:hover {
+    color: var(--accent);
+  }
+  .footer-col a[aria-current='true'] {
+    color: var(--accent);
+  }
+  .footer-base {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 2.5rem;
+    padding-top: 1.4rem;
+    border-top: 1px solid var(--line);
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--text-faint);
+  }
+  .sig {
+    letter-spacing: 0.35em;
+  }
+</style>

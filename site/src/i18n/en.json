@@ -1,0 +1,81 @@
+{
+  "meta": {
+    "title": "Servicio — A friendly desktop supervisor for your dev services",
+    "description": "Keep Laravel queues, Python workers, Node scripts — any command — alive, auto-restarted on crash, cron-scheduled, with live logs and CPU/memory graphs, from a calm control-room desktop app."
+  },
+  "nav": {
+    "features": "Features",
+    "screenshots": "Screenshots",
+    "architecture": "Architecture",
+    "install": "Install",
+    "github": "GitHub"
+  },
+  "hero": {
+    "badge": "Open source · MIT licensed",
+    "title": "Keep your dev services alive.",
+    "subtitle": "Servicio supervises your long-running developer processes — Laravel queues, Python workers, Node scripts, cron jobs, any command — restarted on crash, started on login, streaming logs and metrics, all from a calm control-room GUI.",
+    "cta_download": "Download for macOS",
+    "cta_github": "View on GitHub",
+    "note": "Universal macOS build today · Linux (systemd) supported · Windows on the roadmap"
+  },
+  "problem": {
+    "title": "A drawer full of forgotten terminals.",
+    "body": "Every developer ends up with a pile of php artisan queue:work, python worker.py, npm run dev, cron jobs and one-off scripts — each in its own terminal tab, each forgotten until it silently dies. Servicio is a small native desktop app plus a headless daemon that supervises all of them: keeps them running with restart-on-crash backoff, starts them on login with no sudo, and shows you live logs, CPU and memory graphs, and per-group rollups. No YAML by hand, no tmux gymnastics, no \"is it still up?\" — just a dashboard."
+  },
+  "features": {
+    "title": "Everything you need to supervise.",
+    "subtitle": "One calm dashboard for every long-running process on your machine.",
+    "items": [
+      { "title": "Supervision", "body": "Auto-restart with exponential backoff, restart counters, graceful stop, and crash surfacing — the failure reason lands in the worker log, not the void." },
+      { "title": "Three run modes", "body": "Daemon (N always-on instances), Scheduled (cron or interval, with overlap policy), and Batch (run N times)." },
+      { "title": "Autodetect", "body": "Scan a project folder and get ready-to-run suggestions from six detectors: Laravel, Procfile, crontab, VS Code tasks.json, Node and Python." },
+      { "title": "Groups & tags", "body": "Organize workers into groups with a folder view and drill-in, label them with tags, and filter the dashboard by tag." },
+      { "title": "Live telemetry", "body": "Per-instance CPU and memory sampling, fleet-wide and per-group rollups, and rolling sparklines." },
+      { "title": "Bulk actions", "body": "Start, stop, or restart a whole group in a single click." },
+      { "title": "Full CRUD", "body": "Create with a wizard, edit any worker, delete, and import or export your whole config as JSON." },
+      { "title": "Native & cross-platform", "body": "A universal macOS .dmg today, Linux via systemd, with a self-updating engine and optional Sentry error reporting." }
+    ]
+  },
+  "showcase": {
+    "title": "See it in action.",
+    "subtitle": "A control-room aesthetic that stays out of your way.",
+    "shots": {
+      "dashboard_dark": "Live dashboard with fleet CPU and memory graphs",
+      "dashboard_light": "The same dashboard in light mode",
+      "groups": "Per-group stats with bulk start, stop and restart",
+      "wizard": "The new-worker wizard with framework autodetect"
+    }
+  },
+  "architecture": {
+    "title": "A small Rust core, a native shell.",
+    "body": "Servicio is a Rust cargo workspace plus a Tauri desktop app. The GUI talks to a headless daemon over a 0600 Unix socket with token auth; the daemon supervises every worker and persists them in SQLite. The same daemon answers the servicio CLI, so you can drive it from the terminal too.",
+    "rows": {
+      "core": "Process spawning, supervision, restart and backoff, run modes, metrics.",
+      "ipc": "The framed JSONL Frame protocol shared by daemon and clients.",
+      "daemon": "The long-lived supervisor: SQLite-backed worker store plus socket server.",
+      "cli": "servicio — a thin terminal client over the same protocol.",
+      "detect": "Folder scanners that propose workers (Laravel, Node, Python, …)."
+    }
+  },
+  "install": {
+    "title": "Get started in minutes.",
+    "macos_title": "macOS",
+    "macos_body": "Download the universal .dmg from the latest release, drag Servicio to Applications, then right-click → Open on first launch (the build is currently unsigned).",
+    "linux_title": "Linux",
+    "linux_body": "Build from source; the daemon installs as a systemd --user unit. Packaged Linux artifacts are on the roadmap.",
+    "cli_title": "Prefer the terminal?",
+    "cli_body": "The same daemon speaks to the servicio CLI:"
+  },
+  "footer": {
+    "tagline": "A friendly desktop supervisor for your long-running developer services.",
+    "built": "Built with Rust, Tauri, and React.",
+    "license": "MIT licensed",
+    "links_title": "Project",
+    "lang_title": "Language"
+  },
+  "a11y": {
+    "skip": "Skip to content",
+    "theme": "Toggle dark mode",
+    "lang": "Change language"
+  }
+}

@@ -1,0 +1,57 @@
+/* ───────────────────────────────────────────────────────────
+   Servicio — design tokens. Control-room / telemetry HUD.
+   Dark is the default brand surface; light is an override.
+   ─────────────────────────────────────────────────────────── */
+:root {
+  /* Type */
+  --font-display: 'Bricolage Grotesque', 'Noto Sans Arabic', 'Noto Sans Devanagari', ui-sans-serif, sans-serif;
+  --font-body: 'Hanken Grotesk', 'Noto Sans Arabic', 'Noto Sans Devanagari', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Noto Sans Arabic', ui-monospace, 'SFMono-Regular', monospace;
+
+  /* Brand */
+  --accent: #ff6a1a;
+  --accent-soft: #ff8c4d;
+  --accent-2: #24c8db;
+  --green: #3ddc84;
+  --amber: #f7b955;
+
+  /* Dark surfaces (default) */
+  --bg: #07080a;
+  --bg-2: #0b0d11;
+  --panel: #0e1117;
+  --panel-2: #131820;
+  --line: rgba(255, 255, 255, 0.07);
+  --line-strong: rgba(255, 255, 255, 0.13);
+  --grid: rgba(255, 255, 255, 0.022);
+
+  --text: #e8ebf0;
+  --text-dim: #9aa4b0;
+  --text-faint: #687180;
+
+  --shadow: 0 24px 60px -24px rgba(0, 0, 0, 0.7);
+  --glow-accent: 0 0 0 1px rgba(255, 106, 26, 0.25), 0 14px 40px -12px rgba(255, 106, 26, 0.35);
+
+  /* Geometry */
+  --radius: 14px;
+  --radius-sm: 9px;
+  --radius-lg: 22px;
+  --maxw: 1180px;
+  --space: clamp(1rem, 0.6rem + 2vw, 2rem);
+}
+
+[data-theme='light'] {
+  --bg: #f4f5f7;
+  --bg-2: #eceef1;
+  --panel: #ffffff;
+  --panel-2: #f7f8fa;
+  --line: rgba(10, 14, 20, 0.09);
+  --line-strong: rgba(10, 14, 20, 0.16);
+  --grid: rgba(10, 14, 20, 0.03);
+
+  --text: #14181f;
+  --text-dim: #4a5563;
+  --text-faint: #79828f;
+
+  --shadow: 0 22px 50px -26px rgba(20, 30, 50, 0.28);
+  --glow-accent: 0 0 0 1px rgba(255, 106, 26, 0.3), 0 14px 36px -14px rgba(255, 106, 26, 0.3);
+}

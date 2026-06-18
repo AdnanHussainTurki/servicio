@@ -1,0 +1,109 @@
+---
+import { useTranslations, type Locale } from '../i18n/ui';
+
+interface Props {
+  locale: Locale;
+}
+const { locale } = Astro.props;
+const t = useTranslations(locale);
+const repo = 'https://github.com/AdnanHussainTurki/servicio';
+---
+
+<section class="section" id="install">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <p class="eyebrow">// get started</p>
+      <h2>{t('install.title')}</h2>
+    </div>
+
+    <div class="install-grid">
+      <div class="panel railed step reveal">
+        <h3>{t('install.macos_title')}</h3>
+        <p>{t('install.macos_body')}</p>
+        <a class="btn btn-primary" href={`${repo}/releases/latest`}>{t('hero.cta_download')}</a>
+      </div>
+
+      <div class="panel railed step reveal" style="transition-delay:70ms">
+        <h3>{t('install.linux_title')}</h3>
+        <p>{t('install.linux_body')}</p>
+        <pre class="code"><code>git clone {repo}.git
+cd servicio
+cargo build --release</code></pre>
+      </div>
+
+      <div class="panel cli reveal" style="transition-delay:140ms">
+        <p class="eyebrow">{t('install.cli_title')}</p>
+        <p class="cli-lead">{t('install.cli_body')}</p>
+        <pre class="code"><code><span class="c">servicio</span> ps              <span class="cm"># workers + state</span>
+<span class="c">servicio</span> start queue     <span class="cm"># start / stop a worker</span>
+<span class="c">servicio</span> logs queue      <span class="cm"># stream logs</span>
+<span class="c">servicio</span> metrics queue   <span class="cm"># CPU / memory</span>
+<span class="c">servicio</span> detect ~/app    <span class="cm"># scan a folder</span></code></pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<style>
+  .install-grid {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(2, 1fr);
+  }
+  @media (max-width: 760px) {
+    .install-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+  .cli {
+    grid-column: span 2;
+    padding: 1.6rem;
+  }
+  @media (max-width: 760px) {
+    .cli {
+      grid-column: span 1;
+    }
+  }
+  .step {
+    padding: 1.6rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.8rem;
+  }
+  .step h3 {
+    font-size: 1.3rem;
+  }
+  .step p {
+    color: var(--text-dim);
+    margin: 0;
+    flex: 1;
+  }
+  .step .btn {
+    align-self: flex-start;
+  }
+  .cli-lead {
+    color: var(--text-dim);
+    margin: 0.4rem 0 1rem;
+  }
+  .code {
+    background: var(--bg-2);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    padding: 1rem 1.1rem;
+    overflow-x: auto;
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+    line-height: 1.8;
+    color: var(--text-dim);
+    /* code is always LTR even in RTL pages */
+    direction: ltr;
+    text-align: left;
+  }
+  .code .c {
+    color: var(--accent);
+  }
+  .code .cm {
+    color: var(--text-faint);
+  }
+</style>
