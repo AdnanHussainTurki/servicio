@@ -44,6 +44,16 @@ async fn restart_worker(state: tauri::State<'_, AppState>, name: String) -> Resu
 }
 
 #[tauri::command]
+async fn start_group(state: tauri::State<'_, AppState>, group: String) -> Result<serde_json::Value, String> {
+    bridge::start_group(&state, &group).await
+}
+
+#[tauri::command]
+async fn stop_group(state: tauri::State<'_, AppState>, group: String) -> Result<serde_json::Value, String> {
+    bridge::stop_group(&state, &group).await
+}
+
+#[tauri::command]
 async fn detect_workers(state: tauri::State<'_, AppState>, path: String) -> Result<serde_json::Value, String> {
     bridge::detect_workers(&state, &path).await
 }
@@ -125,6 +135,8 @@ fn main() {
             start_worker,
             stop_worker,
             restart_worker,
+            start_group,
+            stop_group,
             detect_workers,
             metrics,
             service_status,

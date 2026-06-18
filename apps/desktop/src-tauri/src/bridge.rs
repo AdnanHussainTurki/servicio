@@ -51,6 +51,10 @@ pub async fn restart_worker(state: &AppState, name: &str) -> Result<(), String> 
     client.start_worker(name).await.map_err(|e| e.to_string())
 }
 
+pub async fn start_group(state: &AppState, group: &str) -> Result<serde_json::Value, String> { let mut c = state.client.lock().await; c.start_group(group).await.map_err(|e| e.to_string()) }
+
+pub async fn stop_group(state: &AppState, group: &str) -> Result<serde_json::Value, String> { let mut c = state.client.lock().await; c.stop_group(group).await.map_err(|e| e.to_string()) }
+
 #[derive(Serialize)]
 pub struct DaemonStatus {
     pub connected: bool,
