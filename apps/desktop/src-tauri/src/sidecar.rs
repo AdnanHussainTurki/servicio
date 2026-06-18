@@ -30,13 +30,41 @@ pub fn run_daemon_subcommand(args: &[&str]) -> std::io::Result<String> {
     Ok(String::from_utf8_lossy(&out.stdout).into_owned())
 }
 
+/// The build id of the daemon binary the GUI would spawn (its bundled sidecar).
+pub fn bundled_build_id() -> Option<String> {
+    let out = std::process::Command::new(daemon_program()).arg("build-id").output().ok()?;
+    if !out.status.success() { return None; }
+    let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    if s.is_empty() { None } else { Some(s) }
+}
+
 pub async fn ensure_daemon(base: &std::path::Path, daemon_program: &str) -> Result<String> {
     std::fs::create_dir_all(base).ok();
+
+    // Is a daemon already running? If so, check it isn't stale.
     if let Ok(token) = read_token(base) {
-        if Client::connect(&socket_path(base), &token).await.is_ok() {
-            return Ok(token);
+        if let Ok(mut client) = Client::connect(&socket_path(base), &token).await {
+            let running_build = client.daemon_info().await.ok()
+                .and_then(|v| v.get("build").and_then(|b| b.as_str().map(String::from)));
+            let bundled = bundled_build_id();
+            // Stale only when we can determine the bundled build AND it differs
+            // from the running daemon's build (a missing `build` field counts as
+            // a mismatch, so pre-feature daemons get replaced).
+            let stale = matches!(&bundled, Some(b) if running_build.as_deref() != Some(b.as_str()));
+            if !stale {
+                return Ok(token); // current (or build undeterminable) — use it
+            }
+            // Stale daemon: ask it to exit, then wait for the socket to clear.
+            let _ = client.shutdown().await;
+            drop(client);
+            for _ in 0..50 {
+                if !socket_path(base).exists() { break; }
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
         }
     }
+
+    // Spawn the bundled daemon and wait for it to become ready.
     Command::new(daemon_program)
         .arg("serve").arg("--base").arg(base)
         .spawn()
