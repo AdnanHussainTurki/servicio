@@ -2,7 +2,7 @@
 
 use servicio_app::bridge::{self, DaemonStatus};
 use servicio_app::events::run_event_pump;
-use servicio_app::sidecar::{default_base, ensure_daemon, socket_path};
+use servicio_app::sidecar::{daemon_program, default_base, ensure_daemon, socket_path};
 use servicio_app::state::AppState;
 use servicio_core::worker::WorkerSpec;
 use servicio_ipc::types::WorkerStatus;
@@ -48,6 +48,21 @@ async fn metrics(state: tauri::State<'_, AppState>, worker: String, since_secs: 
     bridge::metrics(&state, &worker, since_secs).await
 }
 
+#[tauri::command]
+fn service_status() -> Result<serde_json::Value, String> {
+    bridge::service_status()
+}
+
+#[tauri::command]
+fn install_service() -> Result<(), String> {
+    bridge::install_service()
+}
+
+#[tauri::command]
+fn uninstall_service() -> Result<(), String> {
+    bridge::uninstall_service()
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_notification::init())
@@ -55,12 +70,7 @@ fn main() {
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 let base = default_base();
-                let daemon_program = std::env::current_exe()
-                    .ok()
-                    .and_then(|p| p.parent().map(|d| d.join("servicio-daemon")))
-                    .filter(|p| p.exists())
-                    .map(|p| p.to_string_lossy().into_owned())
-                    .unwrap_or_else(|| "servicio-daemon".to_string());
+                let daemon_program = daemon_program();
                 let token = {
                     let mut attempt = 0;
                     loop {
@@ -98,7 +108,10 @@ fn main() {
             stop_worker,
             restart_worker,
             detect_workers,
-            metrics
+            metrics,
+            service_status,
+            install_service,
+            uninstall_service
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
