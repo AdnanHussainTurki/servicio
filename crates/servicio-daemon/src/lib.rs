@@ -4,6 +4,7 @@ pub mod lock;
 pub mod paths;
 pub mod sampler;
 pub mod serve;
+pub mod service;
 pub mod token;
 
 use db::Db;
