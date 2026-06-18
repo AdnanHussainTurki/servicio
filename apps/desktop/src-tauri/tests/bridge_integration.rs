@@ -35,6 +35,8 @@ fn sleeper(name: &str) -> WorkerSpec {
         restart: RestartPolicy::default(),
         autostart: false,
         enabled: true,
+        group: None,
+        tags: Vec::new(),
     }
 }
 

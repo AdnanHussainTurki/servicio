@@ -156,6 +156,8 @@ mod tests {
             restart: RestartPolicy::default(),
             autostart: true,
             enabled: true,
+            group: None,
+            tags: Vec::new(),
         }
     }
 

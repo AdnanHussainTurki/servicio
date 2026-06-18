@@ -261,6 +261,8 @@ async fn dispatch(daemon: &Arc<Daemon>, id: u64, method: &str, params: serde_jso
                     instances: live.remove(&spec.name).unwrap_or_default(),
                     name: spec.name,
                     run_mode: spec.run_mode,
+                    group: spec.group,
+                    tags: spec.tags,
                 })
                 .collect();
             match serde_json::to_value(list) {

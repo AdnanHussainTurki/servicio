@@ -8,6 +8,10 @@ pub struct WorkerStatus {
     pub name: String,
     pub run_mode: RunMode,
     pub instances: Vec<InstanceStatus>,
+    #[serde(default)]
+    pub group: Option<String>,
+    #[serde(default)]
+    pub tags: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -101,6 +105,8 @@ mod tests {
                 restart_count: 1,
                 pid: Some(4321),
             }],
+            group: None,
+            tags: Vec::new(),
         };
         let v = serde_json::to_value(&s).unwrap();
         let back: WorkerStatus = serde_json::from_value(v).unwrap();

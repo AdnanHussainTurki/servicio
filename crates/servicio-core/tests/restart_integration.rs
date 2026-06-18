@@ -31,6 +31,8 @@ async fn crashing_worker_is_restarted_until_crash_loop_guard() {
         },
         autostart: true,
         enabled: true,
+        group: None,
+        tags: Vec::new(),
     };
 
     let sup = InstanceSupervisor::new(0, spec, Arc::new(TokioProcess), dir.path().join("c.log"));
