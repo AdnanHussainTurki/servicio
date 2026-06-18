@@ -704,6 +704,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "servicio-detect"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "servicio-core",
+ "tempfile",
+]
+
+[[package]]
 name = "servicio-ipc"
 version = "0.1.0"
 dependencies = [
