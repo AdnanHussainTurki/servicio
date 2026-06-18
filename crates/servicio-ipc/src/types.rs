@@ -69,10 +69,26 @@ pub struct DaemonInfo {
     pub running_count: u32,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MetricPoint { pub ts: u64, pub cpu: f32, pub mem: u64 }
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MetricSeries { pub instance: u32, pub points: Vec<MetricPoint> }
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MetricEvent { pub worker: String, pub instance: u32, pub ts: u64, pub cpu: f32, pub mem: u64 }
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn metric_series_roundtrips() {
+        let s = MetricSeries { instance: 0, points: vec![MetricPoint { ts: 1, cpu: 2.0, mem: 3 }] };
+        let back: MetricSeries = serde_json::from_value(serde_json::to_value(&s).unwrap()).unwrap();
+        assert_eq!(s, back);
+    }
 
     #[test]
     fn worker_status_roundtrips() {
