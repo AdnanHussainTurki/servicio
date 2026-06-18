@@ -40,4 +40,13 @@ pub enum Command {
         #[arg(long)]
         base: Option<PathBuf>,
     },
+    /// Install the daemon as a login service (launchd/systemd).
+    InstallService {
+        #[arg(long)]
+        base: Option<PathBuf>,
+    },
+    /// Remove the installed login service.
+    UninstallService,
+    /// Show whether the login service is installed.
+    ServiceStatus,
 }

@@ -32,6 +32,33 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             handle.shutdown().await;
             println!("stopped");
         }
+        Command::InstallService { base } => {
+            use servicio_daemon_lib::{service, service_spec};
+            use servicio_daemon_lib::paths::Paths;
+            let base = base.unwrap_or_else(Paths::default_base);
+            let dir = service::default_service_dir()
+                .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::Unsupported, "service install not supported on this OS"))?;
+            let spec = service_spec(base)?;
+            let path = service::install_to(&spec, &dir, true)?;
+            println!("installed service: {}", path.display());
+        }
+        Command::UninstallService => {
+            use servicio_daemon_lib::service;
+            let dir = service::default_service_dir()
+                .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::Unsupported, "not supported on this OS"))?;
+            service::uninstall_from(&dir, "com.servicio.daemon", true)?;
+            println!("uninstalled service");
+        }
+        Command::ServiceStatus => {
+            use servicio_daemon_lib::service;
+            match service::default_service_dir() {
+                Some(dir) => {
+                    let installed = service::is_installed(&dir, "com.servicio.daemon");
+                    println!("{{\"installed\": {installed}}}");
+                }
+                None => println!("{{\"installed\": false, \"supported\": false}}"),
+            }
+        }
     }
     Ok(())
 }
