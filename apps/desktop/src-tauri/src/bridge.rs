@@ -65,6 +65,11 @@ pub async fn metrics(state: &AppState, worker: &str, since_secs: u64) -> Result<
     client.metrics(worker, since_secs).await.map_err(|e| e.to_string())
 }
 
+pub async fn daemon_log(state: &AppState, lines: u64) -> Result<serde_json::Value, String> {
+    let mut client = state.client.lock().await;
+    client.daemon_log(lines).await.map_err(|e| e.to_string())
+}
+
 pub async fn daemon_status(state: &AppState) -> Result<DaemonStatus, String> {
     let mut client = state.client.lock().await;
     match client.daemon_info().await {

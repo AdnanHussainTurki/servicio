@@ -64,6 +64,11 @@ fn uninstall_service() -> Result<(), String> {
 }
 
 #[tauri::command]
+async fn daemon_log(state: tauri::State<'_, AppState>, lines: u64) -> Result<serde_json::Value, String> {
+    bridge::daemon_log(&state, lines).await
+}
+
+#[tauri::command]
 fn app_version() -> String {
     env!("CARGO_PKG_VERSION").to_string()
 }
@@ -119,7 +124,8 @@ fn main() {
             service_status,
             install_service,
             uninstall_service,
-            app_version
+            app_version,
+            daemon_log
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

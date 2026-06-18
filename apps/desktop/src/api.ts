@@ -29,6 +29,7 @@ export const api = {
   metrics: (worker: string, sinceSecs: number) => invoke<{ instance: number; points: MetricPointT[] }[]>("metrics", { worker, sinceSecs }),
   serviceStatus: () => invoke<{ installed: boolean; supported?: boolean }>("service_status"),
   appVersion: () => invoke<string>("app_version"),
+  daemonLog: (lines: number) => invoke<{ log: string }>("daemon_log", { lines }),
   pickFolder: async (): Promise<string | null> => {
     try {
       const { open } = await import("@tauri-apps/plugin-dialog");
