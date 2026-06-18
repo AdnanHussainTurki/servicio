@@ -50,6 +50,7 @@ async fn metrics(state: tauri::State<'_, AppState>, worker: String, since_secs: 
 
 fn main() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_notification::init())
         .setup(|app| {
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {

@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { WorkerStatus, DaemonStatus, WorkerEvent, RunMode, SuggestionDraft, MetricPointT } from "./types";
 import { useStore } from "./store";
+import { notifyStateEvent } from "./notify";
 
 export interface AddWorkerSpec {
   name: string;
@@ -30,7 +31,9 @@ export const api = {
 export async function subscribeEvents() {
   try {
     await listen<WorkerEvent>("worker-event", (ev) => {
-      useStore.getState().applyEvent(ev.payload);
+      const p = ev.payload;
+      useStore.getState().applyEvent(p);
+      if (p.kind === "state") { void notifyStateEvent(p); }
     });
   } catch (err) {
     console.warn("subscribeEvents failed:", err);
