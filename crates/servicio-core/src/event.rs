@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 pub enum SupervisorEvent {
     State { worker: String, instance: u32, from: InstanceState, to: InstanceState },
     Log { worker: String, instance: u32, stream: String, line: String },
+    Metric { worker: String, instance: u32, ts: u64, cpu: f32, mem: u64 },
 }
 
 /// Snapshot of one instance for status reporting.
@@ -24,4 +25,15 @@ pub struct WorkerStatusCore {
     pub name: String,
     pub run_mode: RunMode,
     pub instances: Vec<InstanceStatus>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn metric_event_roundtrips() {
+        let e = SupervisorEvent::Metric { worker: "q".into(), instance: 0, ts: 1000, cpu: 3.5, mem: 1048576 };
+        let back: SupervisorEvent = serde_json::from_str(&serde_json::to_string(&e).unwrap()).unwrap();
+        assert_eq!(e, back);
+    }
 }
