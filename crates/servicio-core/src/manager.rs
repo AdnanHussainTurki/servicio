@@ -33,6 +33,12 @@ impl Manager {
         self.events.subscribe()
     }
 
+    /// A clone of the broadcast sender so out-of-band producers (e.g. the metrics
+    /// sampler) can publish events to all subscribers.
+    pub fn events_sender(&self) -> tokio::sync::broadcast::Sender<crate::event::SupervisorEvent> {
+        self.events.clone()
+    }
+
     /// Start every instance for a worker per its concurrency, each in its own task.
     pub async fn start_worker(&mut self, spec: WorkerSpec) {
         if let Some(old) = self.workers.remove(&spec.name) {
@@ -184,6 +190,16 @@ mod tests {
         mgr.start_worker(long_running("q")).await; // restart, must replace not accumulate
         assert_eq!(mgr.instance_count("q"), 2);
         mgr.stop_all().await;
+    }
+
+    #[tokio::test]
+    async fn events_sender_can_publish_to_subscribers() {
+        use crate::event::SupervisorEvent;
+        let dir = tempfile::tempdir().unwrap();
+        let mgr = Manager::new(Arc::new(TokioProcess), dir.path().to_path_buf());
+        let mut rx = mgr.subscribe();
+        mgr.events_sender().send(SupervisorEvent::Metric { worker: "q".into(), instance: 0, ts: 1, cpu: 1.0, mem: 1 }).unwrap();
+        assert!(matches!(rx.recv().await.unwrap(), SupervisorEvent::Metric { .. }));
     }
 
     #[tokio::test]
