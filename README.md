@@ -9,8 +9,27 @@ full design.
 - **Phase 1 (done):** headless Rust supervisor engine + daemon with SQLite persistence.
 - **Phase 2a (done):** daemon `serve` command exposing a local authenticated socket API
   (JSONL over a Unix domain socket) + a thin `servicio` CLI client. Live state/log events.
-- **Next:** Phase 2b Tauri GUI; then scheduled/batch modes, framework autodetect,
-  OS-service install + run-on-boot, packaging.
+- **Phase 2b (done):** minimal Tauri desktop GUI — auto-spawns the daemon sidecar, card-grid
+  dashboard with live status, worker detail + live logs, start/stop/restart, simple add form.
+- **Next:** Phase 2c — creation wizard, framework autodetect UI, metrics graphs,
+  notifications; then OS-service install + run-on-boot, packaging.
+
+### Run the GUI (dev)
+
+The GUI spawns the `servicio-daemon` binary as a sidecar, so build it first and put it on
+PATH:
+
+```bash
+cargo build -p servicio-daemon          # provides target/debug/servicio-daemon
+cd apps/desktop
+npm install
+PATH="$PWD/../../target/debug:$PATH" npm run tauri dev
+```
+
+The window opens, the daemon auto-starts under `$XDG_RUNTIME_DIR/servicio` (or a temp dir),
+and the dashboard shows workers live. Add one with "+ New worker". GUI app lives in
+`apps/desktop/` (React/TS frontend + `src-tauri/` Rust bridge); its tests run with
+`npm run test` (frontend) and `cargo test` inside `apps/desktop/src-tauri` (bridge).
 
 ### Build & test
 
