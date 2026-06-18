@@ -16,11 +16,26 @@ export default function App() {
   useEffect(() => {
     subscribeEvents().catch(() => {});
     let alive = true;
+    let appVer: string | null = null;
     const tick = async () => {
       try {
         const d = await api.daemonStatus();
         useStore.getState().setDaemon(d);
         useStore.getState().setWorkers(await api.listWorkers());
+        // Version-skew guard: warn when the connected daemon's version differs
+        // from the app's expected version (stale daemon → missing methods).
+        try {
+          if (appVer === null) appVer = await api.appVersion();
+          const dv = d.version;
+          if (appVer && dv && dv !== appVer) {
+            useStore.getState().setDaemonWarning(
+              `Daemon version ${dv} is running but this app expects ${appVer}. ` +
+              `Quit all Servicio instances (or run: pkill servicio-daemon) and reopen.`,
+            );
+          } else {
+            useStore.getState().setDaemonWarning(null);
+          }
+        } catch { /* version check is best-effort; never crash the poll */ }
       } catch { /* daemon not ready yet */ }
       if (alive) setTimeout(tick, 2000);
     };
@@ -30,6 +45,7 @@ export default function App() {
 
   return (
     <div className="flex h-screen flex-col">
+      <DaemonWarningBanner />
       <div className="flex flex-1 overflow-hidden">
         <Sidebar view={view} setView={setView} />
         <main className="scroll-thin flex-1 overflow-auto">
@@ -49,6 +65,42 @@ export default function App() {
       </div>
       <StatusFooter />
       <ErrorToast />
+    </div>
+  );
+}
+
+function DaemonWarningBanner() {
+  const warning = useStore((s) => s.daemonWarning);
+  const setWarning = useStore((s) => s.setDaemonWarning);
+  if (!warning) return null;
+  return (
+    <div
+      role="alert"
+      className="relative flex items-start gap-3 border-b border-amber-500/30 bg-amber-500/[0.08]
+        px-4 py-2.5 text-xs text-amber-800 dark:bg-amber-400/[0.06] dark:text-amber-200"
+    >
+      <span className="absolute inset-y-0 left-0 w-1 bg-amber-500" aria-hidden />
+      <span
+        className="mt-px flex h-4 w-4 shrink-0 items-center justify-center rounded-full
+          bg-amber-500/20 font-mono text-[10px] font-bold text-amber-700 dark:text-amber-300"
+        aria-hidden
+      >
+        !
+      </span>
+      <div className="min-w-0 flex-1 pl-0.5">
+        <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-amber-600 dark:text-amber-400">
+          version skew
+        </span>
+        <span className="ml-2 break-words leading-snug">{warning}</span>
+      </div>
+      <button
+        className="shrink-0 rounded-md px-1.5 text-base leading-none text-amber-600/70 transition
+          hover:bg-amber-500/10 hover:text-amber-800 dark:text-amber-300/70 dark:hover:text-amber-100"
+        aria-label="Dismiss warning"
+        onClick={() => setWarning(null)}
+      >
+        ×
+      </button>
     </div>
   );
 }

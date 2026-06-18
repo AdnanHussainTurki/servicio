@@ -63,6 +63,11 @@ fn uninstall_service() -> Result<(), String> {
     bridge::uninstall_service()
 }
 
+#[tauri::command]
+fn app_version() -> String {
+    env!("CARGO_PKG_VERSION").to_string()
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_notification::init())
@@ -113,7 +118,8 @@ fn main() {
             metrics,
             service_status,
             install_service,
-            uninstall_service
+            uninstall_service,
+            app_version
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
