@@ -126,4 +126,41 @@ describe("CreateFlow", () => {
     fireEvent.click(chip);
     expect((screen.getByLabelText(/tags/i) as HTMLInputElement).value).toContain("redis");
   });
+
+  it("creates one worker per selection when multiple are checked", async () => {
+    const { api } = await import("../api");
+    vi.mocked(api.detectWorkers).mockResolvedValueOnce([
+      { label: "Dev server", source: "node", name: "dev-server", command: "npm", args: ["run", "dev"], working_dir: "/p", run_mode: { type: "daemon", concurrency: 1 } },
+      { label: "Queue worker", source: "laravel", name: "queue", command: "php", args: ["artisan", "queue:work"], working_dir: "/p", run_mode: { type: "daemon", concurrency: 2 } },
+    ]);
+    vi.mocked(api.addWorker).mockClear();
+    const onDone = vi.fn();
+    render(<CreateFlow onDone={onDone} onCancel={() => {}} />);
+
+    fireEvent.click(screen.getByText(/scan/i));
+    // Both rows appear; index 0 is pre-checked — also check the second.
+    await screen.findByText(/dev server/i);
+    fireEvent.click(screen.getByText(/queue worker/i));
+
+    // Button reflects the count and bulk-creates both.
+    fireEvent.click(screen.getByText(/create 2 workers/i));
+
+    await vi.waitFor(() => expect(api.addWorker).toHaveBeenCalledTimes(2));
+    const names = vi.mocked(api.addWorker).mock.calls.map((c) => (c[0] as { name: string }).name).sort();
+    expect(names).toEqual(["dev-server", "queue"]);
+    await vi.waitFor(() => expect(onDone).toHaveBeenCalled());
+  });
+
+  it("single selection still advances to the Command step", async () => {
+    const { api } = await import("../api");
+    vi.mocked(api.detectWorkers).mockResolvedValueOnce([
+      { label: "Queue worker", source: "laravel", name: "queue", command: "php", args: ["artisan", "queue:work"], working_dir: "/p", run_mode: { type: "daemon", concurrency: 2 } },
+    ]);
+    render(<CreateFlow onDone={() => {}} onCancel={() => {}} />);
+    fireEvent.click(screen.getByText(/scan/i));
+    await screen.findByText(/queue worker/i);
+    // One suggestion, pre-selected → Continue goes to tuning (Command step).
+    fireEvent.click(screen.getByText(/continue/i));
+    expect((screen.getByLabelText(/^command$/i) as HTMLInputElement).value).toBe("php");
+  });
 });
