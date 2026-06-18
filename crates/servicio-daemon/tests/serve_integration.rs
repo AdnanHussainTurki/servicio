@@ -279,6 +279,26 @@ async fn metrics_method_returns_series_for_running_worker() {
 }
 
 #[tokio::test]
+async fn daemon_log_method_returns_log_field() {
+    let dir = tempfile::tempdir().unwrap();
+    let paths = Paths::new(dir.path().to_path_buf());
+    // pre-write a log file so the daemon has something to tail
+    std::fs::write(dir.path().join("daemon.log"), "line one\nline two\n").unwrap();
+    let h = start(paths.clone(), "secret".into()).await;
+    let replies = hello_then(&paths.socket(), vec![
+        Frame::Request { id: 1, method: "daemon_log".into(), params: json!({"lines": 10}) },
+    ]).await;
+    match &replies[1] {
+        Frame::Response { id: 1, result: Some(v), .. } => {
+            assert!(v.get("log").is_some());
+            assert!(v["log"].as_str().unwrap().contains("line two"));
+        }
+        other => panic!("unexpected: {other:?}"),
+    }
+    h.shutdown().await;
+}
+
+#[tokio::test]
 async fn detect_workers_finds_laravel_in_fixture() {
     let dir = tempfile::tempdir().unwrap();
     let paths = Paths::new(dir.path().to_path_buf());

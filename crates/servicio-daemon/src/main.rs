@@ -2,8 +2,46 @@ use clap::Parser;
 use servicio_daemon_lib::cli::{Cli, Command};
 use servicio_daemon_lib::{add_worker, db::Db};
 
+fn init_daemon_logging(path: &std::path::Path) {
+    use std::sync::{Arc, Mutex};
+    use tracing_subscriber::fmt::MakeWriter;
+    use tracing_subscriber::prelude::*;
+    use tracing_subscriber::{fmt, EnvFilter, Registry};
+
+    #[derive(Clone)]
+    struct FileWriter(Arc<Mutex<std::fs::File>>);
+    impl std::io::Write for FileWriter {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> { self.0.lock().unwrap().write(buf) }
+        fn flush(&mut self) -> std::io::Result<()> { self.0.lock().unwrap().flush() }
+    }
+    impl<'a> MakeWriter<'a> for FileWriter {
+        type Writer = FileWriter;
+        fn make_writer(&'a self) -> Self::Writer { self.clone() }
+    }
+
+    let Ok(file) = std::fs::OpenOptions::new().create(true).append(true).open(path) else { return };
+    let writer = FileWriter(Arc::new(Mutex::new(file)));
+    let fmt_layer = fmt::layer().with_ansi(false).with_writer(writer);
+    let _ = Registry::default()
+        .with(EnvFilter::new("info"))
+        .with(fmt_layer)
+        .with(sentry_tracing::layer())   // forwards ERROR events to Sentry (no-op if Sentry uninitialized)
+        .try_init();
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Optional Sentry error reporting. No-op unless SERVICIO_SENTRY_DSN is set.
+    let _sentry_guard = std::env::var("SERVICIO_SENTRY_DSN").ok().filter(|d| !d.is_empty()).map(|dsn| {
+        sentry::init((
+            dsn,
+            sentry::ClientOptions {
+                release: Some(env!("CARGO_PKG_VERSION").into()),
+                ..Default::default()
+            },
+        ))
+    });
+
     let cli = Cli::parse();
     match cli.command {
         Command::Add { name, command, args, working_dir, concurrency, autostart } => {
@@ -24,11 +62,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             let paths = Paths::new(base.unwrap_or_else(Paths::default_base));
             std::fs::create_dir_all(&paths.base)?;
+            // daemon self-logging → <base>/daemon.log (best-effort)
+            init_daemon_logging(&paths.base.join("daemon.log"));
             let _lock = InstanceLock::acquire(&paths.lock())?;
             let token = load_or_create(&paths.token())?;
+            tracing::info!("servicio daemon starting (base={})", paths.base.display());
             let handle = serve(paths, token).await?;
             println!("servicio daemon listening; press Ctrl-C to stop");
             tokio::signal::ctrl_c().await?;
+            tracing::info!("servicio daemon shutting down");
             handle.shutdown().await;
             println!("stopped");
         }

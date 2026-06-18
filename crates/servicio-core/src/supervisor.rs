@@ -133,7 +133,18 @@ impl InstanceSupervisor {
 
         let mut spawned = match self.spawner.spawn(&self.spec) {
             Ok(s) => s,
-            Err(_) => {
+            Err(e) => {
+                let msg = format!("[servicio] failed to start '{}': {}", self.spec.command, e);
+                let _ = sink.lock().unwrap().write_line(self.index, "stderr", &msg);
+                if let Some(tx) = &self.events {
+                    let _ = tx.send(SupervisorEvent::Log {
+                        worker: self.spec.name.clone(),
+                        instance: self.index,
+                        stream: "stderr".into(),
+                        line: msg.clone(),
+                    });
+                }
+                tracing::error!("{msg}");
                 self.set_state(InstanceState::Crashed);
                 return false;
             }
@@ -448,5 +459,18 @@ mod tests {
         let contents = std::fs::read_to_string(&log).unwrap();
         assert!(contents.contains("[stderr]"), "log was: {contents}");
         assert!(contents.contains("oops"));
+    }
+
+    #[tokio::test]
+    async fn spawn_failure_is_logged() {
+        let dir = tempfile::tempdir().unwrap();
+        let log = dir.path().join("t.log");
+        let mut spec = spec("definitely-not-a-real-binary-xyz", &[], RestartPolicy { kind: RestartKind::Never, ..Default::default() });
+        spec.run_mode = RunMode::Batch { run_count: 1, delay_secs: 0 };
+        spec.working_dir = dir.path().to_path_buf();
+        let sup = InstanceSupervisor::new(0, spec, Arc::new(TokioProcess), log.clone());
+        sup.run_until_terminal().await;
+        let body = std::fs::read_to_string(&log).unwrap_or_default();
+        assert!(body.contains("failed to start"), "log was: {body}");
     }
 }
