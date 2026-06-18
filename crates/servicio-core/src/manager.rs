@@ -87,6 +87,8 @@ impl Manager {
                         pid: s.pid(),
                     })
                     .collect(),
+                group: w.spec.group.clone(),
+                tags: w.spec.tags.clone(),
             })
             .collect();
         out.sort_by(|a, b| a.name.cmp(&b.name));
@@ -135,6 +137,8 @@ mod tests {
             restart: RestartPolicy { kind: RestartKind::Always, ..Default::default() },
             autostart: true,
             enabled: true,
+            group: None,
+            tags: Vec::new(),
         }
     }
 

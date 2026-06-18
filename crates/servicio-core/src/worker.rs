@@ -82,6 +82,10 @@ pub struct WorkerSpec {
     pub autostart: bool,
     #[serde(default)]
     pub enabled: bool,
+    #[serde(default)]
+    pub group: Option<String>,
+    #[serde(default)]
+    pub tags: Vec<String>,
 }
 
 #[cfg(test)]
@@ -100,10 +104,30 @@ mod tests {
             restart: RestartPolicy::default(),
             autostart: true,
             enabled: true,
+            group: None,
+            tags: Vec::new(),
         };
         let json = serde_json::to_string(&spec).unwrap();
         let back: WorkerSpec = serde_json::from_str(&json).unwrap();
         assert_eq!(spec, back);
+    }
+
+    #[test]
+    fn worker_spec_group_tags_roundtrip() {
+        let mut s = WorkerSpec {
+            name: "q".into(), command: "sh".into(), args: vec![],
+            working_dir: PathBuf::from("/"), env: BTreeMap::new(),
+            run_mode: RunMode::Daemon { concurrency: 1 }, restart: RestartPolicy::default(),
+            autostart: false, enabled: true, group: Some("app".into()), tags: vec!["redis".into(), "critical".into()],
+        };
+        let back: WorkerSpec = serde_json::from_str(&serde_json::to_string(&s).unwrap()).unwrap();
+        assert_eq!(s, back);
+        s.group = None; s.tags = vec![];
+        // back-compat: JSON without group/tags fields loads to defaults
+        let old = r#"{"name":"q","command":"sh","args":[],"working_dir":"/","env":{},"run_mode":{"type":"daemon","concurrency":1},"restart":{"kind":"on_failure","max_retries":5,"base_secs":1,"max_secs":60,"reset_window_secs":30},"autostart":false,"enabled":true}"#;
+        let loaded: WorkerSpec = serde_json::from_str(old).unwrap();
+        assert_eq!(loaded.group, None);
+        assert!(loaded.tags.is_empty());
     }
 
     #[test]

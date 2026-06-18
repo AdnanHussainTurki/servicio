@@ -328,6 +328,8 @@ mod tests {
             restart,
             autostart: false,
             enabled: true,
+            group: None,
+            tags: Vec::new(),
         }
     }
 

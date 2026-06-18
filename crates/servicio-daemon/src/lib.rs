@@ -40,6 +40,8 @@ pub fn add_worker(
         restart: RestartPolicy::default(),
         autostart,
         enabled: true,
+        group: None,
+        tags: Vec::new(),
     };
     let db = Db::open(db_path)?;
     db.upsert_worker(&spec)
