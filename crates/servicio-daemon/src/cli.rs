@@ -50,6 +50,10 @@ pub enum Command {
     },
     /// Remove the installed login service.
     UninstallService,
+    /// Stop the installed login service (unload; stays installed but won't respawn).
+    StopService,
+    /// Start the installed login service (load).
+    StartService,
     /// Show whether the login service is installed.
     ServiceStatus,
     /// Print this binary's build id (used by the GUI to detect a stale daemon).

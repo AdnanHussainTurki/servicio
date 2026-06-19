@@ -18,4 +18,15 @@ impl AppState {
             token: token.to_string(),
         })
     }
+
+    /// Re-read the token and replace the client connection (used after the
+    /// daemon is stopped and started again, which mints a fresh socket).
+    pub async fn reconnect(&self) -> Result<()> {
+        let token = std::fs::read_to_string(self.base.join("token"))?
+            .trim()
+            .to_string();
+        let client = Client::connect(&self.base, &token).await?;
+        *self.client.lock().await = client;
+        Ok(())
+    }
 }
