@@ -243,6 +243,28 @@ fn dirs_config() -> Option<PathBuf> {
         .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))
 }
 
+/// Resolve the user's home dir cross-platform (for the protected-dir guard).
+fn user_home() -> Option<PathBuf> {
+    std::env::var_os("HOME")
+        .or_else(|| std::env::var_os("USERPROFILE"))
+        .map(PathBuf::from)
+}
+
+/// If `exe` lives inside the user's Documents/Downloads/Desktop, return that
+/// folder's name. Installing the login service from such a path triggers
+/// repeated macOS permission prompts — and a *fresh* prompt on every rebuild,
+/// since an unsigned binary's identity changes each build.
+pub fn protected_install_dir(exe: &Path) -> Option<String> {
+    protected_install_dir_in(exe, user_home()?.as_path())
+}
+
+fn protected_install_dir_in(exe: &Path, home: &Path) -> Option<String> {
+    ["Documents", "Downloads", "Desktop"]
+        .into_iter()
+        .find(|name| exe.starts_with(home.join(name)))
+        .map(|n| n.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -254,6 +276,29 @@ mod tests {
             exe: PathBuf::from("/usr/local/bin/servicio-daemon"),
             base: PathBuf::from("/tmp/servicio"),
         }
+    }
+
+    #[test]
+    fn protected_install_dir_flags_documents_downloads_desktop() {
+        let home = PathBuf::from("/Users/x");
+        for d in ["Documents", "Downloads", "Desktop"] {
+            let exe = home
+                .join(d)
+                .join("projects/servicio/dist/servicio.app/Contents/MacOS/servicio-daemon");
+            assert_eq!(protected_install_dir_in(&exe, &home), Some(d.to_string()));
+        }
+        // Installed locations are fine.
+        assert_eq!(
+            protected_install_dir_in(
+                &PathBuf::from("/Applications/Servicio.app/Contents/MacOS/servicio-daemon"),
+                &home
+            ),
+            None
+        );
+        assert_eq!(
+            protected_install_dir_in(&PathBuf::from("/usr/local/bin/servicio-daemon"), &home),
+            None
+        );
     }
 
     #[test]

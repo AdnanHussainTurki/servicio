@@ -125,6 +125,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 )
             })?;
             let spec = service_spec(base)?;
+            // Guard: never pin the login service to a binary inside Documents/
+            // Downloads/Desktop — that path causes repeated macOS permission
+            // prompts (and a fresh prompt per rebuild for unsigned dev builds).
+            if let Some(folder) = service::protected_install_dir(&spec.exe) {
+                return Err(format!(
+                    "refusing to install the login service from your {folder} folder \
+                     ({}). Move the app to /Applications and install from there to \
+                     avoid repeated macOS permission prompts.",
+                    spec.exe.display()
+                )
+                .into());
+            }
             let path = service::install_to(&spec, &dir, true)?;
             println!("installed service: {}", path.display());
         }
