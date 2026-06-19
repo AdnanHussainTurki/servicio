@@ -24,7 +24,10 @@ async fn add_worker(state: tauri::State<'_, AppState>, spec: WorkerSpec) -> Resu
 }
 
 #[tauri::command]
-async fn get_worker(state: tauri::State<'_, AppState>, name: String) -> Result<serde_json::Value, String> {
+async fn get_worker(
+    state: tauri::State<'_, AppState>,
+    name: String,
+) -> Result<serde_json::Value, String> {
     bridge::get_worker(&state, &name).await
 }
 
@@ -54,27 +57,43 @@ async fn export_workers_to(state: tauri::State<'_, AppState>, path: String) -> R
 }
 
 #[tauri::command]
-async fn import_workers_from(state: tauri::State<'_, AppState>, path: String) -> Result<u32, String> {
+async fn import_workers_from(
+    state: tauri::State<'_, AppState>,
+    path: String,
+) -> Result<u32, String> {
     bridge::import_workers_from(&state, &path).await
 }
 
 #[tauri::command]
-async fn start_group(state: tauri::State<'_, AppState>, group: String) -> Result<serde_json::Value, String> {
+async fn start_group(
+    state: tauri::State<'_, AppState>,
+    group: String,
+) -> Result<serde_json::Value, String> {
     bridge::start_group(&state, &group).await
 }
 
 #[tauri::command]
-async fn stop_group(state: tauri::State<'_, AppState>, group: String) -> Result<serde_json::Value, String> {
+async fn stop_group(
+    state: tauri::State<'_, AppState>,
+    group: String,
+) -> Result<serde_json::Value, String> {
     bridge::stop_group(&state, &group).await
 }
 
 #[tauri::command]
-async fn detect_workers(state: tauri::State<'_, AppState>, path: String) -> Result<serde_json::Value, String> {
+async fn detect_workers(
+    state: tauri::State<'_, AppState>,
+    path: String,
+) -> Result<serde_json::Value, String> {
     bridge::detect_workers(&state, &path).await
 }
 
 #[tauri::command]
-async fn metrics(state: tauri::State<'_, AppState>, worker: String, since_secs: u64) -> Result<serde_json::Value, String> {
+async fn metrics(
+    state: tauri::State<'_, AppState>,
+    worker: String,
+    since_secs: u64,
+) -> Result<serde_json::Value, String> {
     bridge::metrics(&state, &worker, since_secs).await
 }
 
@@ -94,13 +113,27 @@ fn uninstall_service() -> Result<(), String> {
 }
 
 #[tauri::command]
-async fn daemon_log(state: tauri::State<'_, AppState>, lines: u64) -> Result<serde_json::Value, String> {
+async fn daemon_log(
+    state: tauri::State<'_, AppState>,
+    lines: u64,
+) -> Result<serde_json::Value, String> {
     bridge::daemon_log(&state, lines).await
 }
 
 #[tauri::command]
 fn app_version() -> String {
     env!("CARGO_PKG_VERSION").to_string()
+}
+
+#[tauri::command]
+async fn stop_daemon(state: tauri::State<'_, AppState>) -> Result<(), String> {
+    bridge::stop_daemon(&state).await
+}
+
+#[tauri::command]
+async fn start_daemon(state: tauri::State<'_, AppState>) -> Result<(), String> {
+    let prog = daemon_program();
+    bridge::start_daemon(&state, &prog).await
 }
 
 fn main() {
@@ -160,7 +193,9 @@ fn main() {
             install_service,
             uninstall_service,
             app_version,
-            daemon_log
+            daemon_log,
+            stop_daemon,
+            start_daemon
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

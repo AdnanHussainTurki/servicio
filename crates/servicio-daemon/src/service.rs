@@ -145,6 +145,22 @@ pub fn is_installed(dir: &Path, label: &str) -> bool {
     dir.join(unit_filename(label)).exists()
 }
 
+/// Load (`enable=true`) or unload (`enable=false`) the *already-installed* unit
+/// without writing or removing its file. Used to stop/start the login service
+/// while leaving it installed — on macOS this controls launchd's KeepAlive
+/// respawn, so a "stop" actually stays stopped.
+pub fn set_loaded(dir: &Path, label: &str, enable: bool) -> io::Result<()> {
+    let path = dir.join(unit_filename(label));
+    if !path.exists() {
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            format!("service not installed: {}", path.display()),
+        ));
+    }
+    run_loader(&path, label, enable);
+    Ok(())
+}
+
 /// Best-effort invoke launchctl/systemctl. Errors are ignored (status is informational).
 fn run_loader(path: &Path, label: &str, enable: bool) {
     #[cfg(target_os = "macos")]

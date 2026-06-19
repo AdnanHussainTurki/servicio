@@ -1,10 +1,12 @@
+use servicio_app::bridge;
+use servicio_app::state::AppState;
 use servicio_daemon_lib::paths::Paths;
 use servicio_daemon_lib::serve::serve;
 use std::time::Duration;
-use servicio_app::bridge;
-use servicio_app::state::AppState;
 
-async fn running_daemon(dir: &std::path::Path) -> (Paths, servicio_daemon_lib::serve::ServeHandle, AppState) {
+async fn running_daemon(
+    dir: &std::path::Path,
+) -> (Paths, servicio_daemon_lib::serve::ServeHandle, AppState) {
     let paths = Paths::new(dir.to_path_buf());
     let handle = serve(paths.clone(), "secret".into()).await.unwrap();
     tokio::time::sleep(Duration::from_millis(100)).await;
@@ -59,9 +61,9 @@ async fn add_list_start_stop_via_bridge() {
     handle.shutdown().await;
 }
 
+use serde_json::json;
 use servicio_app::events::event_payload;
 use servicio_ipc::Frame;
-use serde_json::json;
 
 #[test]
 fn maps_state_event_frame_to_payload() {
@@ -77,7 +79,11 @@ fn maps_state_event_frame_to_payload() {
 
 #[test]
 fn non_event_frame_maps_to_none() {
-    let frame = Frame::Response { id: 1, result: None, error: None };
+    let frame = Frame::Response {
+        id: 1,
+        result: None,
+        error: None,
+    };
     assert!(event_payload(&frame).is_none());
 }
 
@@ -87,8 +93,14 @@ async fn detect_workers_via_bridge_finds_generic() {
     let (_p, handle, state) = running_daemon(dir.path()).await;
     let proj = dir.path().join("proj");
     std::fs::create_dir_all(&proj).unwrap();
-    let suggestions = bridge::detect_workers(&state, proj.to_str().unwrap()).await.unwrap();
-    assert!(suggestions.as_array().unwrap().iter().any(|s| s["source"] == "generic"));
+    let suggestions = bridge::detect_workers(&state, proj.to_str().unwrap())
+        .await
+        .unwrap();
+    assert!(suggestions
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|s| s["source"] == "generic"));
     handle.shutdown().await;
 }
 

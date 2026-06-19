@@ -12,15 +12,24 @@ pub fn default_base() -> PathBuf {
     }
 }
 
-pub fn socket_path(base: &std::path::Path) -> PathBuf { base.join("daemon.sock") }
-pub fn token_path(base: &std::path::Path) -> PathBuf { base.join("token") }
+pub fn socket_path(base: &std::path::Path) -> PathBuf {
+    base.join("daemon.sock")
+}
+pub fn token_path(base: &std::path::Path) -> PathBuf {
+    base.join("token")
+}
 
 /// Resolve the bundled `servicio-daemon` binary path, falling back to PATH.
 pub fn daemon_program() -> String {
     // Tauri drops the sidecar next to the main exe, named with the platform's
     // executable extension (`servicio-daemon.exe` on Windows).
-    let name = if cfg!(windows) { "servicio-daemon.exe" } else { "servicio-daemon" };
-    std::env::current_exe().ok()
+    let name = if cfg!(windows) {
+        "servicio-daemon.exe"
+    } else {
+        "servicio-daemon"
+    };
+    std::env::current_exe()
+        .ok()
         .and_then(|p| p.parent().map(|d| d.join(name)))
         .filter(|p| p.exists())
         .map(|p| p.to_string_lossy().into_owned())
@@ -29,16 +38,27 @@ pub fn daemon_program() -> String {
 
 /// Run a daemon subcommand, capturing stdout. Used for service-status/install/uninstall.
 pub fn run_daemon_subcommand(args: &[&str]) -> std::io::Result<String> {
-    let out = std::process::Command::new(daemon_program()).args(args).output()?;
+    let out = std::process::Command::new(daemon_program())
+        .args(args)
+        .output()?;
     Ok(String::from_utf8_lossy(&out.stdout).into_owned())
 }
 
 /// The build id of the daemon binary the GUI would spawn (its bundled sidecar).
 pub fn bundled_build_id() -> Option<String> {
-    let out = std::process::Command::new(daemon_program()).arg("build-id").output().ok()?;
-    if !out.status.success() { return None; }
+    let out = std::process::Command::new(daemon_program())
+        .arg("build-id")
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
     let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
-    if s.is_empty() { None } else { Some(s) }
+    if s.is_empty() {
+        None
+    } else {
+        Some(s)
+    }
 }
 
 pub async fn ensure_daemon(base: &std::path::Path, daemon_program: &str) -> Result<String> {
@@ -47,7 +67,10 @@ pub async fn ensure_daemon(base: &std::path::Path, daemon_program: &str) -> Resu
     // Is a daemon already running? If so, check it isn't stale.
     if let Ok(token) = read_token(base) {
         if let Ok(mut client) = Client::connect(base, &token).await {
-            let running_build = client.daemon_info().await.ok()
+            let running_build = client
+                .daemon_info()
+                .await
+                .ok()
                 .and_then(|v| v.get("build").and_then(|b| b.as_str().map(String::from)));
             let bundled = bundled_build_id();
             // Stale only when we can determine the bundled build AND it differs
@@ -64,7 +87,9 @@ pub async fn ensure_daemon(base: &std::path::Path, daemon_program: &str) -> Resu
             // filesystem presence, so just give the old daemon a moment to drop it.
             #[cfg(unix)]
             for _ in 0..50 {
-                if !socket_path(base).exists() { break; }
+                if !socket_path(base).exists() {
+                    break;
+                }
                 tokio::time::sleep(Duration::from_millis(100)).await;
             }
             #[cfg(windows)]
@@ -74,7 +99,9 @@ pub async fn ensure_daemon(base: &std::path::Path, daemon_program: &str) -> Resu
 
     // Spawn the bundled daemon and wait for it to become ready.
     Command::new(daemon_program)
-        .arg("serve").arg("--base").arg(base)
+        .arg("serve")
+        .arg("--base")
+        .arg(base)
         .spawn()
         .map_err(|e| anyhow!("spawn daemon: {e}"))?;
     for _ in 0..50 {
@@ -89,5 +116,7 @@ pub async fn ensure_daemon(base: &std::path::Path, daemon_program: &str) -> Resu
 }
 
 fn read_token(base: &std::path::Path) -> Result<String> {
-    Ok(std::fs::read_to_string(token_path(base))?.trim().to_string())
+    Ok(std::fs::read_to_string(token_path(base))?
+        .trim()
+        .to_string())
 }

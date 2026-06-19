@@ -77,7 +77,16 @@ export default function App() {
             useStore.getState().setDaemonWarning(null);
           }
         } catch { /* version check is best-effort; never crash the poll */ }
-      } catch { /* daemon not ready yet */ }
+      } catch {
+        // Daemon unreachable (not ready, or stopped by the user) — reflect it.
+        useStore.getState().setDaemon({
+          connected: false,
+          version: "",
+          uptime_secs: 0,
+          worker_count: 0,
+          running_count: 0,
+        });
+      }
       if (alive) setTimeout(tick, 2000);
     };
     tick();

@@ -54,6 +54,11 @@ jobs:
         working-directory: apps/desktop
         run: npm ci
 
+      - name: Sync version to tag
+        if: startsWith(github.ref, 'refs/tags/')
+        working-directory: apps/desktop
+        run: node scripts/set-version.mjs ${{ github.ref_name }}
+
       # Stage the per-arch + lipo'd universal daemon sidecars before bundling.
       - name: Prepare universal sidecar
         working-directory: apps/desktop
@@ -113,6 +118,11 @@ jobs:
         working-directory: apps/desktop
         run: npm ci
 
+      - name: Sync version to tag
+        if: startsWith(github.ref, 'refs/tags/')
+        working-directory: apps/desktop
+        run: node scripts/set-version.mjs ${{ github.ref_name }}
+
       - name: Prepare sidecar
         working-directory: apps/desktop
         run: npm run prepare-sidecar
@@ -153,6 +163,11 @@ jobs:
       - name: Install frontend dependencies
         working-directory: apps/desktop
         run: npm ci
+
+      - name: Sync version to tag
+        if: startsWith(github.ref, 'refs/tags/')
+        working-directory: apps/desktop
+        run: node scripts/set-version.mjs ${{ github.ref_name }}
 
       # prepare-sidecar.sh is bash; run it via Git Bash (default on the runner).
       - name: Prepare sidecar

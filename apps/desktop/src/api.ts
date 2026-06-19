@@ -37,6 +37,8 @@ export const api = {
   metrics: (worker: string, sinceSecs: number) => invoke<{ instance: number; points: MetricPointT[] }[]>("metrics", { worker, sinceSecs }),
   serviceStatus: () => invoke<{ installed: boolean; supported?: boolean }>("service_status"),
   appVersion: () => invoke<string>("app_version"),
+  stopDaemon: () => invoke<void>("stop_daemon"),
+  startDaemon: () => invoke<void>("start_daemon"),
   daemonLog: (lines: number) => invoke<{ log: string }>("daemon_log", { lines }),
   pickFolder: async (): Promise<string | null> => {
     try {
